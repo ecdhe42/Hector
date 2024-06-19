@@ -8,33 +8,61 @@ CLS     equ 0D2Fh
 SETCOLS equ 19E0h
 COLORS  equ 0BD3h
 
+IF K7
+    org 4C00h
+ELSE
     org 4200h
+ENDIF
     ld sp, 0C000h
 
-debut:
-    call CLS        ; Efface l'ecran
-    ld bc, 0FFFh    ; Valeur du delai
-    call DELAY      ; Attente
+start:
+    call CLS        ; Clears screen
+    ld bc, 0FFFh    ; Delay
+    call DELAY      ; Wait
 
+; ##########################################################################
+; # Splash screen
+; ##########################################################################
     ld a, 0h
-    call SETSCR     ; Couleur d'ecran=3
+    call SETSCR     ; Screen color = 0 (black)
     ld c, 1h
-    CALL CHRCOL     ; Couleur texte=1
+    CALL CHRCOL     ; Text color = 1 (red)
 
-    ld de, 3859h     ; Position X et Y
-    ld bc, title    ; Table ASCII
-    call PUTSTR     ; Affiche texte
-    ld de, 1869h     ; Position X et Y
-    ld bc, subtitle ; Table ASCII
-    call PUTSTR     ; Affiche texte
-    ld c, 3h
-    CALL CHRCOL     ; Couleur texte=3
-    ld de, 289Ch     ; Position X et Y
-    ld bc, author   ; Table ASCII
-    call PUTSTR     ; Affiche texte
-    ld de, 18A9h     ; Position X et Y
-    ld bc, author2  ; Table ASCII
-    call PUTSTR     ; Affiche texte
+    ; Set color palette
+    ; 0=black
+    ; 1=red
+    ; 2=green
+    ; 3=yellow
+    ; 4=blue
+    ; 5=magenta
+    ; 6=cyan
+    ; 7=white
+    ; <half-tone first color><half-tone second color><second color><first color>
+    ld hl, 01000h
+;    ld (hl), 18h    ; color0 = 0 (black), color2 = 3 (yellow)
+    ld (hl), 20h    ; color0 = 0 (black), color2 = 1 (red)
+    ld hl, 01800h
+    ld (hl), 39h    ; color1 = 4 (blue), color3 = 7 (white)
+
+    ld de, 3859h    ; X and Y positions
+    ld bc, title    ; Text
+    call PUTSTR     ; Displays text on screen
+    ld de, 1869h    ; X and Y positions
+    ld bc, subtitle ; Text
+    call PUTSTR     ; Displays text on screen
+    ld c, 3h        ; 
+    CALL CHRCOL     ; Text color = 3 (white)
+    ld de, 289Ch    ; X and Y positions
+    ld bc, author   ; Text
+    call PUTSTR     ; Displays text on screen
+    ld de, 18A9h    ; X and Y positions
+    ld bc, author2  ; Text
+    call PUTSTR     ; Displays text on screen
+
+    ld hl, bitmap_title
+    ld de, 0D000h
+    ld bc, 00580h
+    ldir
 
 splash_loop:
     ld hl, 03800h
@@ -398,8 +426,12 @@ buffer:
     db 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     db 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
+bitmap_title:
+include "rsc_henon_title.asm"
+
     org 06000h
 bitmap:
+IF K7 = 0
 include "rsc_henon1.asm"
-
+ENDIF
     END

@@ -2,3 +2,5 @@
 *.bin
 *.xcf
 *.K7
+rsc*.asm
+old
