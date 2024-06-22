@@ -1,6 +1,6 @@
 from PIL import Image
 
-img = Image.open('henon2.png')
+img = Image.open('henon1.png')
 
 def get_color(val):
     if val == 1:
@@ -31,7 +31,7 @@ def get_color(val):
 # 3: white
 palette = [0, 2, 3, 1]
 
-with open("rsc_henon2.asm", "wb") as o:
+with open("rsc_henon1.asm", "wb") as o:
 
     db = []
 
