@@ -1,4 +1,4 @@
-all: henon1.K7 henon2.K7 henon2.bin henon1.bin
+all: henon1.K7 henon2.K7 henon2.bin henon1.bin afond.bin
 
 henon1.K7: henon1_k7.bin rsc_henon1.bin
 	python create_k7.py 1
@@ -32,3 +32,6 @@ hello.bin: hello.asm rsc.asm
 
 olipix.bin: olipix.asm
 	pasmo.exe olipix.asm olipix.bin
+
+afond.bin: afond.asm rsc_afond.asm rsc_afond_bg.asm afond_bitmap_ptr.asm
+	pasmo.exe -E K7=0 afond.asm afond.bin
