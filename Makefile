@@ -34,4 +34,4 @@ olipix.bin: olipix.asm
 	pasmo.exe olipix.asm olipix.bin
 
 afond.bin: afond.asm rsc_afond.asm rsc_afond_bg.asm afond_bitmap_ptr.asm
-	pasmo.exe -E K7=0 afond.asm afond.bin
+	pasmo.exe -E K7=0 afond.asm afond.bin afond.sym

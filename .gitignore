@@ -3,3 +3,4 @@
 *.xcf
 rsc*.asm
 old
+*.sym
