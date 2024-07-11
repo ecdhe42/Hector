@@ -39,7 +39,7 @@ start:
     ; 7=white
     ; <half-tone first color><half-tone second color><second color><first color>
     ld hl, 01000h
-    ld (hl), 60h    ; color0 = 0 (black), color2 = 2 (green)
+    ld (hl), 50h    ; color0 = 0 (black), color2 = 2 (green)
     ld hl, 01800h
     ld (hl), 39h    ; color1 = 1 (red), color3 = 7 (white)
 
@@ -179,10 +179,24 @@ draw_bg_loop:
 
 ; DRAW TRACK
 
-    ld a, 100                       ; Set the counter to 100 lines to be drawn (track)
-    ld hl, bitmap+$1900
+    ld a, (car_bump)
+    cp 0
+    jp z,no_bump
+    cp 1
+    jp z, bump1
+    ld de, 0D080h
+    ld a, 1
+    ld (car_bump), a
+    jp set_draw_track
+bump1
+    ld a, 2
+    ld (car_bump), a
+no_bump:
     ld de, 0D000h
+set_draw_track:
+    ld hl, bitmap+$1900
     ld iy, (turn_shift_ptr)
+    ld a, 75                       ; Set the counter to 75+25=100 lines to be drawn (75 for the track, 25 for track+car)
 
 draw_track:
     push de                 ; We save the screen-aligned value of de
@@ -222,6 +236,137 @@ draw_track_ldir
     cp 0
     jp nz, draw_track
 ; END DRAW TRACK
+
+    ld hl, bitmap_car       ; Save the address of the car bitmap
+    ld a, h
+    ld (car_bitmap_h), a
+    ld a, l
+    ld (car_bitmap_l), a
+
+    ld a, (car_bump)            ; If car_bump is set, we only draw 21
+    cp 1
+    jp nz, end_car_bump_adjust
+    ld a, 23                    ; We only draw 21 lines instead of 23
+    jp draw_track_with_car      ; as we started 2 lines down
+end_car_bump_adjust:
+    ld a, 25
+
+draw_track_with_car:
+    push de                 ; We save the screen-aligned value of de
+    ld h,d
+    ld l,e
+    ld b,0
+    ld c,(iy)
+    push af                 ; Save register A
+    ld a, (turn_dir)
+    cp 0
+    jp nz, shift_track_left_with_car
+    add hl,bc               ; If we veer right, add the shift to the destination ptr
+    jp done_shift_track_with_car
+shift_track_left_with_car:
+    and a
+    sbc hl,bc               ; If we veer left, substract the shift from the destination ptr
+
+done_shift_track_with_car:
+    pop af                  ; Restore register A
+    ld d,h
+    ld e,l                  ; de += pixel shift
+
+draw_track_ldir_with_car
+    ld h, (ix)              ; hl = pointer
+    ld l, (ix+1)
+    ld bc, 00040h
+    ldir
+    pop hl                  ; Restore the screen-aligned value of DE into HL
+    push hl                 ; Save it again
+    push af
+    ld a, (car_x)
+    ld b,0
+    ld c,a
+    add hl,bc
+    ld d,h
+    ld e,l                  ; de += $6
+
+    ld a, (car_bitmap_h)    ; Restore the car bitmap pointer into HL
+    ld h, a
+    ld a, (car_bitmap_l)
+    ld l, a
+
+    ld bc, 1
+REPT 12
+    ld a, (de)              ; a = background
+    and (hl)                ; a = background & mask
+    add hl, bc
+    or (hl)                 ; a = (background & mask) | car
+    add hl, bc
+    ld (de), a
+    inc e
+ENDM
+
+    ld a, h
+    ld (car_bitmap_h), a    ; Save the car bitmap pointer (post ldir)
+    ld a, l
+    ld (car_bitmap_l), a
+    pop af
+
+    pop hl                  ; Restore the screen-aligned value of DE into HL
+    ld bc,$40
+    add hl,bc
+    ld d,h
+    ld e,l                  ; de += $40 (before the ldir command)
+
+    dec a                   ; number of lines--
+    inc ix                  ; next bitmap address
+    inc ix
+    inc iy                  ; next turn shift
+    cp 0
+    jp nz, draw_track_with_car
+
+    ld a, (car_bump)                    ; If car_bump is set
+    cp 1
+    jp nz, end_car_bump_post_adjust     ; we need to update ix and iy
+    inc ix                              ; for the two lines we didn't draw
+    inc ix
+    inc ix
+    inc ix
+;    inc iy
+;    inc iy
+end_car_bump_post_adjust:
+
+animate_car_wheels:
+    ld iy, $E641                        ; Base offset on the screen
+    ld a, (frame)                       ; We use the frame count
+    and $7                              ; A = frame MOD 8
+    sra a
+    sra a
+    ld b, a                             ; B = (frame MOD 8) >> 2
+;    bit 2, a
+;    jp nz, animate_car_wheel_higher
+;    ld b, 0
+;    jp animate_car_wheel_draw
+;animate_car_wheel_higher:
+;    ld b, 1
+;animate_car_wheel_draw:
+    ld a, (frame)                       ; We use the frame count
+    and $7                              ; A = frame MOD 8
+    sla a
+    sla a
+    sla a
+    sla a
+    sla a
+    sla a
+    ld c, a                             ; C = (frame MOD 8) << 6
+    ld a, (car_x)                       ; A = car_x
+    add a, c
+    ld c, a                             ; C = (frame MOD 8) << 6 + car_x
+    add iy, bc
+
+    ld a, $FF
+    ld (iy), a
+    ld bc, 9
+    add iy, bc
+    ld (iy), a
+
     nop
     nop
     nop
@@ -542,6 +687,22 @@ draw_needle_loop:
 ; #########################################################################################
 
 road_turn_left:
+    ld a, (car_x)               ; A = X position of the car
+    cp 4
+    jp z, end_move_car_left     ; Cannot go lower than 4
+    cp 44
+    jp nz, move_car_left        ; If car_x == 50 and we want to go left
+    ld a, 0
+    ld (car_bump), a            ; Reset car_bump
+    ld a, (car_x)
+move_car_left:
+    dec a
+    ld (car_x), a               ; car_x--
+    cp 6                        
+    jp nz, end_move_car_left    ; If new car_x == 6
+    ld a, 1
+    ld (car_bump), a            ; Shake
+end_move_car_left:
     ld a, (turn_speed)
     cp 0                        ; If turn_speed = 0 (straight)
     jp nz, keep_move_left
@@ -582,6 +743,22 @@ turn_less_right:
 
 
 road_turn_right:
+    ld a, (car_x)                ; A = X position of the car
+    cp 46
+    jp z, end_move_car_right     ; Cannot go higher than 48
+    cp 6
+    jp nz, move_car_right       ; If car_x == 50 and we want to go left
+    ld a, 0
+    ld (car_bump), a            ; Reset car_bump
+    ld a, (car_x)
+move_car_right:
+    inc a
+    ld (car_x), a               ; car_x--
+    cp 44
+    jp nz, end_move_car_right   ; If new car_x == 6
+    ld a, 1
+    ld (car_bump), a            ; Shake
+end_move_car_right:
     ld a, (turn_speed)
     cp 0                        ; If turn_speed = 0 (straight)
     jp nz, keep_move_right
@@ -661,6 +838,10 @@ turn_shift
 
 turn_shift_ptr  db 0, 0
 
+car_bump    db 0
+car_x       db $16
+car_bitmap_h    db 0
+car_bitmap_l    db 0
 dist        db 10
 frame       db 12
 bg_shift    db 0
@@ -773,5 +954,7 @@ bitmap_bg:
 include "rsc_afond_bg.asm"
 bitmap_needles:
 include "rsc_afond_needles.asm"
+bitmap_car:
+include "rsc_afond_car.asm"
 ENDIF
     END
