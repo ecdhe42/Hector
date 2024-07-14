@@ -57,7 +57,9 @@ with open("afond_bitmap_ptr.asm", "w") as f:
 
 
     for l in invert_l:
-        print(''.join(['X' if val == a else '.' for val in l]))
+        l2 = l[:]
+        l2.reverse()
+        print(''.join(['X' if val == a else '.' for val in l2]))
         for i in range(100):
             l[i] = l[i] + 64*i
 

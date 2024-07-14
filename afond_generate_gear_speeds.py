@@ -49,7 +49,7 @@ for i in range(4):
     gear = gears[i]
     next_gear = gears[i+1]
     for rpm in gear.rpms:
-        rpm.next = (9 - rpm.rpm) * 8
+        rpm.next = 0
         curr_speed = rpm.speed
         for next_rpm in next_gear.rpms:
             if next_rpm.speed == rpm.speed:
@@ -67,7 +67,8 @@ for i in range(1, 5):
                 rpm.prev = (i - 1) * 64 + (prev_rpm.rpm-1) * 8
                 break
 
-gears[0].rpms[0].acc = 4
+gears[0].rpms[0].acc = 8
+gears[0].rpms[1].acc = 8
 
 for gear in gears:
     print(gear.str())

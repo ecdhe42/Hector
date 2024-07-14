@@ -7,6 +7,7 @@ PUTSTR  equ 0D0Ch
 CLS     equ 0D2Fh
 SETCOLS equ 19E0h
 COLORS  equ 0BD3h
+FPS     equ 20
 
 IF K7
     org 4C00h
@@ -49,6 +50,12 @@ start:
 
     ld a, 24                        ; Set track speed of 3 frames
     ld (frame), a
+
+    ld iy, 0D2A0h
+    ld (other_car_iy), iy
+
+    ld iy, track
+    ld (track_ptr), iy
 
     ld hl,bitmap                    ; Draw the top line of the track
     ld de,0D000h                    ; As it may not be fully drawn
@@ -134,12 +141,17 @@ draw_init_gearbox_icon:
 
 ; ######################################################################################
 
-    di
-;    ld bc, 1000H
-;    ld hl, 0500H
-;    call 1A09H
-;    ei
-    ld iy, (gear_speed_ptr)     ; iy = &gear_speed
+splash_loop:
+    ld hl, 03800h
+    ld a, (hl)
+    cp $ff
+    jp z, splash_loop
+splash_end
+    ld a, (hl)
+    cp $ff
+    jp nz, splash_end
+
+    ld iy, (gear_speed_ptr)         ; iy = &gear_speed
     jp draw_speed_rpm
 
 draw_frame:
@@ -373,6 +385,10 @@ animate_car_wheels:
 
     ld iy, (gear_speed_ptr)     ; iy = &gear_speed
 
+;draw_other_car:
+;    ld a, (other_car_y)
+;    and $
+
 animate_track:
     ; The whole track pointer is 4800 bytes long (24 frames)
     ld a, (iy+7)            ; a = speed
@@ -490,24 +506,143 @@ no_switch_gear:
     ld (clutch_down), a     ; Reset clutch down flag
 end_check_switch_gear:
 
-check_road_turn:
+check_car_turn:
     ; Check joystick for left and right (in the future it will be automated)
     ld hl, 03807h
     ld a, (hl)
     cp $ff
-    jp z, end_check_road_turn        ; If no joystick, draw next frame
+    jp z, end_check_car_turn        ; If no joystick, draw next frame
 
     bit 0, a                ; Check if joystick goes left
-    jp z, road_turn_left
+    jp z, car_turn_left
     bit 1, a
-    jp z, road_turn_right    
-end_check_road_turn:
+    jp z, car_turn_right    
+end_check_car_turn:
 ;    bit 2, a
 ;    jp z, switch_gear_up
 ;    bit 3, a
 ;    jp z, switch_gear_down
 
+update_track_position:
+    ld b, (iy+7)                ; B = speed
+    sra b
+    sra b
+    sra b
+    and a                       ; clear carry
+    ld a, (track_counter)       ; A = track counter
+    add a, b
+    ld (track_counter), a       ; track_counter += speed
+    jp po, end_update_track_position    ; If there is no overflow, skip section
+    ld a, (track_steps)
+    dec a
+    ld (track_steps), a            ; track_steps--
+    cp 0
+    jp nz, end_update_track_position    ; if track_steps > 0, skip section
+    ld iy, (track_ptr)
+    ld a, (iy)
+    cp $FF
+    jp z, game_over             ; If the track value = $FF, end of the game
+    and $C0
+    cp 0
+    jp z, end_check_road_turn
+check_turn_track_left
+    cp 128
+    jp nz, check_turn_track_right
+    jp road_turn_left
+check_turn_track_right:
+    cp 64
+    jp nz, end_check_road_turn
+    jp road_turn_right
+end_check_road_turn:
+    ld a, (iy)
+    and $3F
+    ld (track_steps), a
+    inc iy
+    ld (track_ptr), iy
+end_update_track_position
+
+timer:
+    ld a, (time_counter)
+    dec a
+    ld (time_counter), a
+    cp 0
+    jp nz, end_timer
+    ld a, FPS
+    ld (time_counter), a
+    ld a, (seconds_low)
+    add a, 5
+    ld (seconds_low), a
+    cp 50
+    jp nz, refresh_counter
+    ld a, 0
+    ld (seconds_low), a
+    ld a, (seconds_high)
+    add a, 5
+    ld (seconds_high), a
+    cp 30
+    jp nz, refresh_counter
+    ld a, 0
+    ld (seconds_high), a
+    ld a, (minutes_low)
+    add a, 5
+    ld (minutes_low), a
+    cp 50
+    jp nz, refresh_counter
+    ld a, 0
+    ld (minutes_low), a
+    ld a, (minutes_high)
+    add a, 5
+    ld (minutes_high), a
+refresh_counter:
+    ld b, 0
+    ld a, (seconds_low)
+    ld c, a
+    ld hl, digits       
+    add hl, bc          ; hl = digits + seconds_low
+    ld d, h
+    ld e, l
+    ld hl, $EB22
+    call display_digit
+    ld b, 0
+    ld a, (seconds_high)
+    ld c, a
+    ld hl, digits       
+    add hl, bc          ; hl = digits + seconds_high
+    ld d, h
+    ld e, l
+    ld hl, $EB21
+    call display_digit
+    ld b, 0
+    ld a, (minutes_low)
+    ld c, a
+    ld hl, digits       
+    add hl, bc          ; hl = digits + minutes_low
+    ld d, h
+    ld e, l
+    ld hl, $EB1F
+    call display_digit
+    ld b, 0
+    ld a, (minutes_high)
+    ld c, a
+    ld hl, digits       
+    add hl, bc          ; hl = digits + minutes_high
+    ld d, h
+    ld e, l
+    ld hl, $EB1E
+    call display_digit
+end_timer:
+
     jp check_gear_refresh
+
+
+game_over:
+    ld c, 1h
+    CALL CHRCOL     ; Text color = 1 (red)
+    ld de, 3089h    ; X and Y positions
+    ld bc, game_won  ; Text
+    call PUTSTR     ; Displays text on screen
+game_over_loop:
+    jp game_over_loop
 
 ;check_switch_gear:
 ;    ld hl, 05FF7H   ; Check if the player pushed the trigger button
@@ -572,19 +707,6 @@ check_gear_refresh:
     cp 0
     jp z, draw_frame
 
-;    ld a, 0
-;    ld (clutch_down), a     ; Reset clutch down flag
-    ; CONSTANT ACCELERATION
-;    ld iy, (gear_speed_ptr)
-;    ld a, (iy)              ; If RPM = 8[000]
-;    cp 8
-;    jp z, draw_speed_rpm
-
-;accelerate:
-;    ld b,0
-;    ld c,8
-;    add iy, bc
-;    ld (gear_speed_ptr), iy     ; iy += 8 (switch to higher RPM)
 draw_speed_rpm:
     ld a, 0
     ld (gear_refresh), a        ; Reset the refresh flag
@@ -686,7 +808,7 @@ draw_needle_loop:
 ; # ROAD TURNS
 ; #########################################################################################
 
-road_turn_left:
+car_turn_left:
     ld a, (car_x)               ; A = X position of the car
     cp 4
     jp z, end_move_car_left     ; Cannot go lower than 4
@@ -703,6 +825,29 @@ move_car_left:
     ld a, 1
     ld (car_bump), a            ; Shake
 end_move_car_left:
+    jp end_check_car_turn
+
+car_turn_right:
+    ld a, (car_x)                ; A = X position of the car
+    cp 46
+    jp z, end_move_car_right     ; Cannot go higher than 48
+    cp 6
+    jp nz, move_car_right       ; If car_x == 50 and we want to go left
+    ld a, 0
+    ld (car_bump), a            ; Reset car_bump
+    ld a, (car_x)
+move_car_right:
+    inc a
+    ld (car_x), a               ; car_x--
+    cp 44
+    jp nz, end_move_car_right   ; If new car_x == 6
+    ld a, 1
+    ld (car_bump), a            ; Shake
+end_move_car_right:
+    jp end_check_car_turn
+
+
+road_turn_left:
     ld a, (turn_speed)
     cp 0                        ; If turn_speed = 0 (straight)
     jp nz, keep_move_left
@@ -743,22 +888,6 @@ turn_less_right:
 
 
 road_turn_right:
-    ld a, (car_x)                ; A = X position of the car
-    cp 46
-    jp z, end_move_car_right     ; Cannot go higher than 48
-    cp 6
-    jp nz, move_car_right       ; If car_x == 50 and we want to go left
-    ld a, 0
-    ld (car_bump), a            ; Reset car_bump
-    ld a, (car_x)
-move_car_right:
-    inc a
-    ld (car_x), a               ; car_x--
-    cp 44
-    jp nz, end_move_car_right   ; If new car_x == 6
-    ld a, 1
-    ld (car_bump), a            ; Shake
-end_move_car_right:
     ld a, (turn_speed)
     cp 0                        ; If turn_speed = 0 (straight)
     jp nz, keep_move_right
@@ -845,24 +974,18 @@ car_bitmap_l    db 0
 dist        db 10
 frame       db 12
 bg_shift    db 0
+other_car_y     db 10
+other_car_iy    db 0, 0
+seconds_low     db 0
+seconds_high    db 0
+minutes_low     db 0
+minutes_high    db 0
+time_counter    db FPS
+track_counter   db 0
+track_steps     db 10
 
-sky
-    db $EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE
-    db $EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE
-    db $BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB
-    db $BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB
-
-digits
-    db 12,51,51,51,12
-    db 12,15,12,12,63
-    db 12,51,48,12,63
-    db 15,48,12,48,15
-    db 48,12,03,63,12
-    db 63,03,12,48,15
-    db 60,03,15,51,12
-    db 63,48,48,12,12
-    db 12,51,12,51,12
-    db 12,51,60,48,15
+game_won:
+    db "GAME OVER"
 
 gear
     db 0
@@ -897,11 +1020,36 @@ gear_speed
 ;    db 1,0,45,0,64,104,0,90,  2,5,0,0,56,120,4,100, 3,5,5,0,48,120,8,110, 4,5,10,0,40,120,8,120,5,5,10,25,32,120,4,125, 6,5,15,0,24,120,2,130,7,5,15,25,16,120,1,135,   8,5,20,0,16,120,0,140
 ;    db 1,5,15,0,64,168,0,130, 2,5,20,0,56,184,4,140,3,5,25,0,48,184,8,150,4,5,30,0,40,184,8,160,5,5,30,25,32,184,4,165, 6,5,35,0,24,184,2,170,7,5,35,25,16,184,1,175,   8,5,40,0,16,184,0,180
 ;    db 1,5,35,0,0,232,0,170,  2,5,40,0,0,248,4,180, 3,5,45,0,0,248,8,190, 4,10,0,0,0,248,8,200, 5,10,0,25,0,248,4,205,  6,10,5,0,0,248,2,210, 7,10,5,25,0,248,1,215,    8,10,10,0,0,248,0,220
-    db 1,0,5,0,64,0,4,10,  2,0,10,0,56,0,4,20,  3,0,15,0,48,0,8,30,  4,0,20,0,40,0,8,40,  5,0,25,0,40,0,4,50,  6,0,30,0,40,0,2,60,  7,0,35,0,40,0,1,70,  8,0,40,0,40,0,0,80
-    db 1,0,20,0,64,24,0,40,  2,0,25,0,56,32,4,50,  3,0,30,0,48,40,8,60,  4,0,35,0,40,48,8,70,  5,0,40,0,40,56,4,80,  6,0,45,0,40,56,2,90,  7,5,0,0,40,56,1,100,  8,5,5,0,40,56,0,110
-    db 1,0,35,0,64,88,0,70,  2,0,40,0,56,96,4,80,  3,0,45,0,48,104,8,90,  4,5,0,0,40,112,8,100,  5,5,5,0,40,120,4,110,  6,5,10,0,40,120,2,120,  7,5,15,0,40,120,1,130,  8,5,20,0,40,120,0,140
-    db 1,5,0,0,64,152,0,100,  2,5,5,0,56,160,4,110,  3,5,10,0,48,168,8,120,  4,5,15,0,40,176,8,130,  5,5,20,0,40,184,4,140,  6,5,25,0,40,184,2,150,  7,5,30,0,40,184,1,160,  8,5,35,0,40,184,0,170
+    db 1,0,5,0,0,0,8,10,  2,0,10,0,0,0,8,20,  3,0,15,0,0,0,8,30,  4,0,20,0,40,0,8,40,  5,0,25,0,40,0,4,50,  6,0,30,0,40,0,2,60,  7,0,35,0,40,0,1,70,  8,0,40,0,40,0,0,80
+    db 1,0,20,0,0,24,0,40,  2,0,25,0,0,32,4,50,  3,0,30,0,0,40,8,60,  4,0,35,0,40,48,8,70,  5,0,40,0,40,56,4,80,  6,0,45,0,40,56,2,90,  7,5,0,0,40,56,1,100,  8,5,5,0,40,56,0,110
+    db 1,0,35,0,0,88,0,70,  2,0,40,0,0,96,4,80,  3,0,45,0,0,104,8,90,  4,5,0,0,40,112,8,100,  5,5,5,0,40,120,4,110,  6,5,10,0,40,120,2,120,  7,5,15,0,40,120,1,130,  8,5,20,0,40,120,0,140
+    db 1,5,0,0,0,152,0,100,  2,5,5,0,0,160,4,110,  3,5,10,0,0,168,8,120,  4,5,15,0,40,176,8,130,  5,5,20,0,40,184,4,140,  6,5,25,0,40,184,2,150,  7,5,30,0,40,184,1,160,  8,5,35,0,40,184,0,170
     db 1,5,15,0,0,216,0,130,  2,5,20,0,0,224,4,140,  3,5,25,0,0,232,8,150,  4,5,30,0,0,240,8,160,  5,5,35,0,0,248,4,170,  6,5,40,0,0,248,2,180,  7,5,45,0,0,248,1,190,  8,10,0,0,0,248,0,200
+
+track
+    db 129, 129, 129, 65, 65, $FF
+
+track_ptr   db 0, 0
+
+bitmap_ptr
+    include "afond_bitmap_ptr.asm"
+
+    org 06000h
+bitmap:
+IF K7 = 0
+include "rsc_afond.asm"
+bitmap_bg:
+include "rsc_afond_bg.asm"
+bitmap_needles:
+include "rsc_afond_needles.asm"
+bitmap_car:
+include "rsc_afond_car.asm"
+include "rsc_afond_cars_others.asm"
+sky
+    db $EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE
+    db $EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE
+    db $BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB
+    db $BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB
 
 bitmap_gauge
     db 0,0,0,0,255,255,0,0,0,0,0,0,0,255,0,3,255,0,0,0
@@ -920,16 +1068,6 @@ bitmap_gauge
     db 240,0,0,0,240,15,0,0,0,5,0,0,0,0,192,3,0,0,0,0
 
 bitmap_gearbox_icon
-;    db $30,$30,$30
-;    db $30,$30,$30
-;    db $30,$30,$30
-;    db $30,$30,$30
-;    db $F0,$FF,$3F
-;    db $30,$30,$00
-;    db $30,$30,$00
-;    db $30,$30,$00
-;    db $30,$30,$00
-
     db $00,$FF,$00
     db $F0,$00,$0F
     db $0C,$00,$30
@@ -943,18 +1081,17 @@ bitmap_gearbox_icon
     db $F0,$00,$0F
     db $00,$FF,$00
 
-bitmap_ptr
-    include "afond_bitmap_ptr.asm"
+digits
+    db 12,51,51,51,12
+    db 12,15,12,12,63
+    db 12,51,48,12,63
+    db 15,48,12,48,15
+    db 48,12,03,63,12
+    db 63,03,12,48,15
+    db 60,03,15,51,12
+    db 63,48,48,12,12
+    db 12,51,12,51,12
+    db 12,51,60,48,15
 
-    org 06000h
-bitmap:
-IF K7 = 0
-include "rsc_afond.asm"
-bitmap_bg:
-include "rsc_afond_bg.asm"
-bitmap_needles:
-include "rsc_afond_needles.asm"
-bitmap_car:
-include "rsc_afond_car.asm"
 ENDIF
     END

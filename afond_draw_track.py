@@ -28,7 +28,7 @@ draw.polygon([(120,100), (10,199), (240,199), (120,100)], col0)
 draw.polygon([(120,100), (10,199), (30,199), (120,100)], col1)
 draw.polygon([(120,100), (220,199), (240,199), (120,100)], col1)
 draw.polygon([(120,100), (122,199), (128,199), (120,100)], col3)
-#im.show()
+img.show()
 
 with open("rsc_afond.asm", "wb") as o:
 
