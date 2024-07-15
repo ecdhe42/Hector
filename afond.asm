@@ -24,10 +24,55 @@ start:
 ; ##########################################################################
 ; # Splash screen
 ; ##########################################################################
-;    ld a, 0h
-;    call SETSCR     ; Screen color = 0 (black)
-;    ld c, 1h
-;    CALL CHRCOL     ; Text color = 1 (red)
+    ld a, 0
+    call SETSCR     ; Screen color = 0 (black)
+    ld c, 1
+    CALL CHRCOL     ; Text color = 1 (red)
+    ld de, 384Ch    ; X and Y positions
+    ld bc, title   ; Text
+    call PUTSTR     ; Displays text on screen
+
+    ld c, 2
+    CALL CHRCOL     ; Text color = 2
+    ld de, 186Ch    ; X and Y positions
+    ld bc, track1_name  ; Text
+    call PUTSTR     ; Displays text on screen
+    ld de, 187Ch    ; X and Y positions
+    ld bc, track2_name   ; Text
+    call PUTSTR     ; Displays text on screen
+
+    ld c, 3
+    CALL CHRCOL     ; Text color = 3 (white)
+    ld de, 289Ch    ; X and Y positions
+    ld bc, author   ; Text
+    call PUTSTR     ; Displays text on screen
+    ld de, 18A9h    ; X and Y positions
+    ld bc, author2  ; Text
+    call PUTSTR     ; Displays text on screen
+    ld de, 18B6h    ; X and Y positions
+    ld bc, author3  ; Text
+    call PUTSTR     ; Displays text on screen
+
+splash_loop:
+    ld hl, 03801h
+    ld a, (hl)
+    cp $ff
+    jp z, splash_loop
+    bit 1, a
+    jp z, select_track1
+    bit 0, a
+    jp z, select_track2
+    jp splash_loop
+select_track1:
+    ld iy, track1
+    ld (track_ptr), iy
+    jp splash_end
+select_track2:
+    ld iy, track2
+    ld (track_ptr), iy
+splash_end
+    ld a, 0h
+    call SETSCR     ; Screen color = 0 (black)
 
     ; Set color palette
     ; 0=black
@@ -54,8 +99,8 @@ start:
     ld iy, 0D2A0h
     ld (other_car_iy), iy
 
-    ld iy, track
-    ld (track_ptr), iy
+    ld iy, turn_shift               ; Set turn_shift_ptr = &turn_shift
+    ld (turn_shift_ptr), iy
 
     ld hl,bitmap                    ; Draw the top line of the track
     ld de,0D000h                    ; As it may not be fully drawn
@@ -71,9 +116,6 @@ draw_sky:
     dec a
     cp 0
     jp nz, draw_sky
-
-    ld iy, turn_shift               ; Set turn_shift_ptr = &turn_shift
-    ld (turn_shift_ptr), iy
 
     ld a, 28
     ld hl,bitmap_gauge
@@ -141,15 +183,15 @@ draw_init_gearbox_icon:
 
 ; ######################################################################################
 
-splash_loop:
-    ld hl, 03800h
-    ld a, (hl)
-    cp $ff
-    jp z, splash_loop
-splash_end
-    ld a, (hl)
-    cp $ff
-    jp nz, splash_end
+;splash_loop:
+;    ld hl, 03800h
+;    ld a, (hl)
+;    cp $ff
+;    jp z, splash_loop
+;splash_end
+;    ld a, (hl)
+;    cp $ff
+;    jp nz, splash_end
 
     ld iy, (gear_speed_ptr)         ; iy = &gear_speed
     jp draw_speed_rpm
@@ -518,27 +560,59 @@ check_car_turn:
     bit 1, a
     jp z, car_turn_right    
 end_check_car_turn:
-;    bit 2, a
-;    jp z, switch_gear_up
-;    bit 3, a
-;    jp z, switch_gear_down
 
-update_track_position:
+
+update_advancement_on_track:
     ld b, (iy+7)                ; B = speed
-    sra b
-    sra b
-    sra b
+;    srl b
     and a                       ; clear carry
     ld a, (track_counter)       ; A = track counter
     add a, b
     ld (track_counter), a       ; track_counter += speed
     jp po, end_update_track_position    ; If there is no overflow, skip section
+
+drift:
+    ld a, (turn_speed)          ; A = turn_speed
+    cp 0
+    jp z, end_drift             ; If turn_speed = 0, skip the rest of this section
+    ld b, a                     ; B = turn_speed
+    ld a, (turn_dir)            ; Otherwise, check the turn direction
+    cp 0
+    jp nz, drift_right
+drift_left:
+    ld a, (car_x)               ; A = car_x, B = turn_speed
+    sub b
+    ld (car_x), a               ; car_x -= turn_speed
+    sbc a, 4
+    jp nc, drift_check_bump     ; if car_x > 4, skip the rest of this section
+    ld a, 4
+    ld (car_x), a               ; Otherwise car_x = 4
+    jp drift_check_bump
+drift_right:
+    ld a, (car_x)               ; A = car_x, B = turn_speed
+    add a, b
+    ld (car_x), a               ; car_x += turn_speed
+    sbc a, 46
+    jp m, drift_check_bump ; if car_x < 46, skip the rest of this section
+    ld a, 46                ; if car_x > 46, then car_x = 46
+    ld (car_x), a
+drift_check_bump:           ; Check if the car is hitting the side
+    ld b, 0
+    ld a, (car_x)
+    ld c, a                 ; C = car_x
+    ld hl, car_x_bump
+    add hl, bc              ; HL = &car_x_bump + car_x
+    ld a, (hl)
+    ld (car_bump), a        ; car_bump = car_x_bump[car_x]
+end_drift
+
     ld a, (track_steps)
     dec a
     ld (track_steps), a            ; track_steps--
     cp 0
     jp nz, end_update_track_position    ; if track_steps > 0, skip section
-    ld iy, (track_ptr)
+
+    ld iy, (track_ptr)          ; Get the new track
     ld a, (iy)
     cp $FF
     jp z, game_over             ; If the track value = $FF, end of the game
@@ -658,20 +732,24 @@ switch_gear_up:
     cp 4
     jp z, end_check_switch_gear        ; If we're in top gear, do nothing - we're at the max
 
-    inc a
-    ld (gear), a            ; Otherwise gear++
-
-    ld a, 1
-    ld (clutch_down), a     ; We set the clutch flag
-    ld (gear_refresh), a    ; We set the gear refresh flag
-
     ld iy, (gear_speed_ptr)     ; iy = &gear_speed
-
     ld a, (iy+4)
-    ld b, 0
+    cp 0
+    jp z, end_check_switch_gear         ; If we're not fast enough for the next gear (next = 0), do nothing
+
+    ; Otherwise, switch gear up
     ld c, a
+    ld b, 0
     add iy, bc
     ld (gear_speed_ptr), iy     ; iy += *(iy+4)
+
+    ld a, (gear)
+    inc a
+    ld (gear), a            ; gear++
+
+    ld a, 1
+    ld (clutch_down), a     ; We set the clutch flag (so that we don't automatically switch gear up again)
+    ld (gear_refresh), a    ; We set the gear refresh flag (so we know we need to update the dashboard)
 
     jp end_check_switch_gear
 
@@ -949,11 +1027,14 @@ display_digit:
     ld (hl), a
     ret
 
-;title:
-;    db 20h, 20h, 20h
-;    db "A FOND A FOND A FOND!", 0
-;author2
-;    db "Copyleft Laurent Poulain 2024", 0
+title:
+    db "A FOND A FOND A FOND!", 0
+author
+    db "Copyleft Laurent Poulain 2024", 0
+author2
+    db "Avec l'aide d'Olipix pour les",0
+author3
+    db "graphiques",0
 
 turn_dir
     db 0
@@ -1026,13 +1107,34 @@ gear_speed
     db 1,5,0,0,0,152,0,100,  2,5,5,0,0,160,4,110,  3,5,10,0,0,168,8,120,  4,5,15,0,40,176,8,130,  5,5,20,0,40,184,4,140,  6,5,25,0,40,184,2,150,  7,5,30,0,40,184,1,160,  8,5,35,0,40,184,0,170
     db 1,5,15,0,0,216,0,130,  2,5,20,0,0,224,4,140,  3,5,25,0,0,232,8,150,  4,5,30,0,0,240,8,160,  5,5,35,0,0,248,4,170,  6,5,40,0,0,248,2,180,  7,5,45,0,0,248,1,190,  8,10,0,0,0,248,0,200
 
-track
-    db 129, 129, 129, 65, 65, $FF
+track1
+    ; Bit 0: are we turning left
+    ; Bit 1: are we turning right
+    ; Bit 2-7: number of steps after the turn (min=1, max=63)
+    ; Examples:
+    ; 191 = Turn left and wait for 63 steps
+    ; 129 = Turn left and wait for 1 step
+    ; 127 = Turn right and wait for 63 steps
+    ; 65 = Turn right and wait for 1 step
+    ; 63 = Wait for 63 steps
+    ; $FF = end of the track (game over)
+    db 127, 63, 148, 112, 65, 127, 129, 191, 129, 129, 191, 65, 65, 65, 65, 65, 127, 129, 129, 191, $FF
+track1_name
+    db "1. Petit joueur", 0
+track2
+    db 129,129,191,65,65,65,65,65,127,129,129,129,129,129,191,65,65,65,65,65,127,129,129,191,$FF
+track2_name
+    db "2. Jaitaibourrai", 0
 
 track_ptr   db 0, 0
 
+car_x_bump
+    ; Given the value of car_x, what's the value of car_bump
+    db 1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,1,1,1,1,1,1,1
+
 bitmap_ptr
     include "afond_bitmap_ptr.asm"
+end_bitmap_ptr
 
     org 06000h
 bitmap:
