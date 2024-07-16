@@ -73,8 +73,9 @@ def convert_competing_cars():
     img1 = Image.open('afond_car_s1.png')
     img2 = Image.open('afond_car_s2.png')
     img3 = Image.open('afond_car_s3.png')
+    img4 = Image.open('afond_car_s3.png')
 
-    imgs = [img3, img2, img1]
+    imgs = [img4, img3, img2, img1]
 
     with open("rsc_afond_cars_others.asm", "wb") as o:
         db = []

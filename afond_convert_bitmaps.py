@@ -70,5 +70,26 @@ def convert_gaugue_needles():
             line = '    db ' + ','.join(db[y*16:y*16+16]) + '\r\n'
             o.write(line.encode())
 
+def convert_title():
+    img = Image.open('afond_title.png')
+    with open("rsc_afond_title.asm", "wb") as o:
+
+        db = []
+
+        for y in range(img.height):
+            for x in range(0, img.width, 4):
+                val1 = get_color(img.getpixel((x+3, y)))
+                val2 = get_color(img.getpixel((x+2, y)))
+                val3 = get_color(img.getpixel((x+1, y)))
+                val4 = get_color(img.getpixel((x, y)))
+
+                val = val1*16*4 + val2*16 + val3*4 + val4
+                db.append(str(val))
+
+        for y in range(int(len(db) / 23)):
+            line = '    db ' + ','.join(db[y*23:y*23+23]) + '\r\n'
+            o.write(line.encode())
+
 #convert_digits()
 #convert_gaugue_needles()
+convert_title()

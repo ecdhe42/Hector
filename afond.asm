@@ -26,14 +26,45 @@ start:
 ; ##########################################################################
     ld a, 0
     call SETSCR     ; Screen color = 0 (black)
-    ld c, 1
-    CALL CHRCOL     ; Text color = 1 (red)
-    ld de, 384Ch    ; X and Y positions
-    ld bc, title   ; Text
-    call PUTSTR     ; Displays text on screen
+;    ld c, 1
+;    CALL CHRCOL     ; Text color = 1 (red)
+
+    ld a, 3
+    ld (tmp), a
+    ld de, $CB02
+draw_title:
+    ld a, 10
+    ld hl, bitmap_title
+    ld bc, 23
+draw_title_line:
+    ldir
+    push hl
+    ld h,d
+    ld l,e
+    ld bc, 41
+    add hl, bc
+    ld d,h
+    ld e,l
+    pop hl
+    ld bc, 23
+    dec a
+    cp 0
+    jp nz, draw_title_line
+    ld a, e
+    add a, 15
+    inc d
+    ld e, a
+    ld a, (tmp)
+    dec a
+    ld (tmp), a
+    cp 0
+    jp nz, draw_title
 
     ld c, 2
     CALL CHRCOL     ; Text color = 2
+    ld de, 185Ch    ; X and Y positions
+    ld bc, please_select   ; Text
+    call PUTSTR     ; Displays text on screen
     ld de, 186Ch    ; X and Y positions
     ld bc, track1_name  ; Text
     call PUTSTR     ; Displays text on screen
@@ -64,12 +95,12 @@ splash_loop:
     jp z, select_track2
     jp splash_loop
 select_track1:
-    ld iy, track1
-    ld (track_ptr), iy
+    ld bc, track1
+    ld (track_ptr), bc
     jp splash_end
 select_track2:
-    ld iy, track2
-    ld (track_ptr), iy
+    ld bc, track2
+    ld (track_ptr), bc
 splash_end
     ld a, 0h
     call SETSCR     ; Screen color = 0 (black)
@@ -95,9 +126,6 @@ splash_end
 
     ld a, 24                        ; Set track speed of 3 frames
     ld (frame), a
-
-    ld iy, 0D2A0h
-    ld (other_car_iy), iy
 
     ld iy, turn_shift               ; Set turn_shift_ptr = &turn_shift
     ld (turn_shift_ptr), iy
@@ -427,10 +455,6 @@ animate_car_wheels:
 
     ld iy, (gear_speed_ptr)     ; iy = &gear_speed
 
-;draw_other_car:
-;    ld a, (other_car_y)
-;    and $
-
 animate_track:
     ; The whole track pointer is 4800 bytes long (24 frames)
     ld a, (iy+7)            ; a = speed
@@ -540,9 +564,10 @@ check_switch_gear:
     cp $ff
     jp z, no_switch_gear        ; If no joystick, jump to next section
     bit 2, a
-    jp z, switch_gear_up
+    jp z, switch_gear_up        ; If joystick up (bit 2 is off), switch gear up
     bit 3, a
-    jp z, switch_gear_down
+    jp nz, no_switch_gear
+    call switch_gear_down         ; If joystick down (bit 3 is off), switch gear down
 no_switch_gear:
     ld a, 0
     ld (clutch_down), a     ; Reset clutch down flag
@@ -574,7 +599,7 @@ update_advancement_on_track:
 drift:
     ld a, (turn_speed)          ; A = turn_speed
     cp 0
-    jp z, end_drift             ; If turn_speed = 0, skip the rest of this section
+    jp z, end_drift             ; If turn_speed = 0, there is no drift. Skip the rest of this section
     ld b, a                     ; B = turn_speed
     ld a, (turn_dir)            ; Otherwise, check the turn direction
     cp 0
@@ -606,33 +631,42 @@ drift_check_bump:           ; Check if the car is hitting the side
     ld (car_bump), a        ; car_bump = car_x_bump[car_x]
 end_drift
 
+check_car_bump:
+    ld a, (car_bump)                ; A = car_bump
+    cp 0
+    jp z, end_check_car_bump
+    call brake                      ; if car_bump flag set, brake
+end_check_car_bump
+
+next_track_step:
     ld a, (track_steps)
     dec a
     ld (track_steps), a            ; track_steps--
     cp 0
     jp nz, end_update_track_position    ; if track_steps > 0, skip section
 
-    ld iy, (track_ptr)          ; Get the new track
-    ld a, (iy)
+    ld bc, (track_ptr)          ; Get the new track (bc=*track_ptr)
+    ld a, (bc)
     cp $FF
     jp z, game_over             ; If the track value = $FF, end of the game
-    and $C0
+    and $C0                     ; A = *track_ptr & 0xC0 (top 2 bits of *track_ptr, direction)
     cp 0
-    jp z, end_check_road_turn
+    jp z, end_check_road_turn   ; If A = 0, then no turn
 check_turn_track_left
     cp 128
     jp nz, check_turn_track_right
-    jp road_turn_left
+    jp road_turn_left           ; If A = 128 (7th bit on), then turn left
 check_turn_track_right:
     cp 64
     jp nz, end_check_road_turn
-    jp road_turn_right
+    jp road_turn_right          ; If A = 64 (6th bit on), then turn right
 end_check_road_turn:
-    ld a, (iy)
-    and $3F
-    ld (track_steps), a
-    inc iy
-    ld (track_ptr), iy
+    ld bc, (track_ptr)          ; Get the new track (bc=*track_ptr)
+    ld a, (bc)
+    and $3F                     ; A = *track_ptr & $3F (lower 6 bits of *track_ptr), number of steps after turn
+    ld (track_steps), a         ; track_steps = (track value) % b00111111 (6 lower bits)
+    inc bc
+    ld (track_ptr), bc          ; track_ptr++
 end_update_track_position
 
 timer:
@@ -712,17 +746,22 @@ end_timer:
 game_over:
     ld c, 1h
     CALL CHRCOL     ; Text color = 1 (red)
-    ld de, 3089h    ; X and Y positions
+    ld de, 6069h    ; X and Y positions
     ld bc, game_won  ; Text
     call PUTSTR     ; Displays text on screen
-game_over_loop:
-    jp game_over_loop
+    ld de, 5079h
+    ld bc, (track_ptr)
+    inc bc
+    call PUTSTR     ; Displays text on screen
 
-;check_switch_gear:
-;    ld hl, 05FF7H   ; Check if the player pushed the trigger button
-;    ld a, (hl)
-;    bit 7, a
-;    jp nz, gear_section
+    ; Restore all variable initial states
+    ld hl, variables_backup
+    ld de, variables
+    ld bc, variables_backup - variables
+    ldir
+
+    jp splash_loop
+
 switch_gear_up:
     ld a, (clutch_down)
     cp 0
@@ -756,11 +795,11 @@ switch_gear_up:
 switch_gear_down:
     ld a, (clutch_down)
     cp 0
-    jp nz, end_check_switch_gear        ; If the clutch flag it set, do nothing
+    ret nz                  ; If the clutch flag it set, do nothing
 
     ld a, (gear)
     cp 0
-    jp z, end_check_switch_gear        ; If we're in low gear, do nothing - we're at the max
+    ret z                   ; If we're in low gear, do nothing - we're at the max
 
     dec a
     ld (gear), a            ; Otherwise gear--
@@ -769,7 +808,7 @@ switch_gear_down:
     ld (clutch_down), a     ; We set the clutch flag
     ld (gear_refresh), a    ; We set the gear refresh flag
 
-    ld iy, (gear_speed_ptr)     ; iy = &gear_speed
+    ld iy, (gear_speed_ptr) ; iy = &gear_speed
 
     ld a, (iy+5)            ; A = offset inside gear_speed
     ld iy, gear_speed
@@ -777,8 +816,7 @@ switch_gear_down:
     ld c, a
     add iy, bc
     ld (gear_speed_ptr), iy   ; iy = &gear+speed + *(iy+5)
-
-    jp end_check_switch_gear
+    ret
 
 check_gear_refresh:
     ld a, (gear_refresh)
@@ -881,6 +919,22 @@ draw_needle_loop:
     jp nz, draw_needle_loop
 
     jp draw_frame
+
+brake:
+    ld a, (iy)                  ; A = RPM number
+    cp 1
+    jp z, brake_gear_down
+    ld b,$FF                    ; Otherwise we switch down RPM
+    ld c,$F8
+    add iy, bc
+    ld (gear_speed_ptr), iy     ; iy -= 8 (switch to lower RPM)
+    ld a, 16
+    ld (gear_rpm), a
+    ld (gear_refresh), a
+    ret
+brake_gear_down:
+    call switch_gear_down
+    ret
 
 ; #########################################################################################
 ; # ROAD TURNS
@@ -1029,34 +1083,29 @@ display_digit:
 
 title:
     db "A FOND A FOND A FOND!", 0
+please_select:
+    db "Choisissez votre circuit:", 0
 author
     db "Copyleft Laurent Poulain 2024", 0
 author2
     db "Avec l'aide d'Olipix pour les",0
 author3
     db "graphiques",0
+game_won:
+    db "GAME OVER"
 
-turn_dir
-    db 0
-turn_speed
-    db 0
-turn_shift
-    db 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    db 9,8,8,8,8,8,8,7,7,7,7,7,7,6,6,6,6,6,6,6,6,5,5,5,5,5,5,5,5,5,4,4,4,4,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-    db 17,16,16,16,15,15,14,14,13,13,13,12,12,12,11,11,11,10,10,10,10,9,9,9,9,8,8,8,8,7,7,7,7,7,6,6,6,6,6,6,5,5,5,5,5,5,5,4,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-    db 27,26,25,25,24,23,22,21,21,20,19,19,18,18,17,16,16,15,15,14,14,13,13,13,12,12,11,11,11,10,10,10,9,9,9,8,8,8,8,7,7,7,7,6,6,6,6,6,5,5,5,5,5,5,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1
-
+variables:
+turn_dir        db 0
+turn_speed      db 0
 turn_shift_ptr  db 0, 0
-
-car_bump    db 0
-car_x       db $16
+tmp             db 0
+car_bump        db 0
+car_x           db $16
 car_bitmap_h    db 0
 car_bitmap_l    db 0
-dist        db 10
-frame       db 12
-bg_shift    db 0
-other_car_y     db 10
-other_car_iy    db 0, 0
+dist            db 10
+frame           db 12
+bg_shift        db 0
 seconds_low     db 0
 seconds_high    db 0
 minutes_low     db 0
@@ -1064,48 +1113,15 @@ minutes_high    db 0
 time_counter    db FPS
 track_counter   db 0
 track_steps     db 10
+gear            db 0
+clutch_down     db 0
+gear_rpm        db 16
+gear_refresh    db 0
+gear_speed_offset    db 0
+gear_speed_ptr  db 0, 0
 
-game_won:
-    db "GAME OVER"
-
-gear
-    db 0
-clutch_down
-    db 0
-
-gear_rpm
-    db 16
-
-gear_refresh
-    db 0
-
-gear_speed_offset
-    db 0
-
-gear_speed_ptr
-    db 0, 0
-
-gear_speed
-    ; All 8 RPM positions (8x8 = 64 values) for all 5 gears (one gear per line)
-    ; For each RPM position:
-    ; byte #0: RPM (div 1000)
-    ; byte #1: speed top digit (base 10)
-    ; byte #2: speed middle digit (base 10)
-    ; byte #3: speed low digit (base 10)
-    ; byte #4: gear_speed shift when switching to a higher gear (e.g. +64 to)
-    ; byte #5: gear_speed offset when switching to a lower gear (this is because sub or sbc don't work with iy)
-    ; byte #6: acceleration
-    ; byte #7: speed (in binary)
-;    db 1,0,5,0,64,0,2,10,     2,0,10,0,56,0,4,20,   3,0,15,0,48,0,8,30,   4,0,20,0,40,0,8,40,   5,0,20,25,32,0,4,45,    6,0,25,0,24,0,2,50,   7,0,25,25,16,0,1,55,      8,0,30,0,16,0,0,60
-;    db 1,0,25,0,64,40,0,50,   2,0,30,0,56,56,4,60,  3,0,35,0,48,56,8,70,  4,0,40,0,40,56,8,80,  5,0,40,25,32,56,4,85,   6,0,45,0,24,56,2,90,  7,0,45,25,16,56,1,95,     8,5,0,0,16,56,0,100
-;    db 1,0,45,0,64,104,0,90,  2,5,0,0,56,120,4,100, 3,5,5,0,48,120,8,110, 4,5,10,0,40,120,8,120,5,5,10,25,32,120,4,125, 6,5,15,0,24,120,2,130,7,5,15,25,16,120,1,135,   8,5,20,0,16,120,0,140
-;    db 1,5,15,0,64,168,0,130, 2,5,20,0,56,184,4,140,3,5,25,0,48,184,8,150,4,5,30,0,40,184,8,160,5,5,30,25,32,184,4,165, 6,5,35,0,24,184,2,170,7,5,35,25,16,184,1,175,   8,5,40,0,16,184,0,180
-;    db 1,5,35,0,0,232,0,170,  2,5,40,0,0,248,4,180, 3,5,45,0,0,248,8,190, 4,10,0,0,0,248,8,200, 5,10,0,25,0,248,4,205,  6,10,5,0,0,248,2,210, 7,10,5,25,0,248,1,215,    8,10,10,0,0,248,0,220
-    db 1,0,5,0,0,0,8,10,  2,0,10,0,0,0,8,20,  3,0,15,0,0,0,8,30,  4,0,20,0,40,0,8,40,  5,0,25,0,40,0,4,50,  6,0,30,0,40,0,2,60,  7,0,35,0,40,0,1,70,  8,0,40,0,40,0,0,80
-    db 1,0,20,0,0,24,0,40,  2,0,25,0,0,32,4,50,  3,0,30,0,0,40,8,60,  4,0,35,0,40,48,8,70,  5,0,40,0,40,56,4,80,  6,0,45,0,40,56,2,90,  7,5,0,0,40,56,1,100,  8,5,5,0,40,56,0,110
-    db 1,0,35,0,0,88,0,70,  2,0,40,0,0,96,4,80,  3,0,45,0,0,104,8,90,  4,5,0,0,40,112,8,100,  5,5,5,0,40,120,4,110,  6,5,10,0,40,120,2,120,  7,5,15,0,40,120,1,130,  8,5,20,0,40,120,0,140
-    db 1,5,0,0,0,152,0,100,  2,5,5,0,0,160,4,110,  3,5,10,0,0,168,8,120,  4,5,15,0,40,176,8,130,  5,5,20,0,40,184,4,140,  6,5,25,0,40,184,2,150,  7,5,30,0,40,184,1,160,  8,5,35,0,40,184,0,170
-    db 1,5,15,0,0,216,0,130,  2,5,20,0,0,224,4,140,  3,5,25,0,0,232,8,150,  4,5,30,0,0,240,8,160,  5,5,35,0,0,248,4,170,  6,5,40,0,0,248,2,180,  7,5,45,0,0,248,1,190,  8,10,0,0,0,248,0,200
+variables_backup:
+    db 0, 0, 0, 0, 0, 0, $16, 0, 0, 10, 12, 0, 0, 0, 0, 0, FPS, 0, 10, 0, 0, 16, 0, 0, 0, 0
 
 track1
     ; Bit 0: are we turning left
@@ -1118,7 +1134,7 @@ track1
     ; 65 = Turn right and wait for 1 step
     ; 63 = Wait for 63 steps
     ; $FF = end of the track (game over)
-    db 127, 63, 148, 112, 65, 127, 129, 191, 129, 129, 191, 65, 65, 65, 65, 65, 127, 129, 129, 191, $FF
+    db 128+20, 64+48, 64+1, 64+63, 128+1, 128+63, 128+1, 128+1, 128+63, 64+1, 64+1, 64+1, 64+1, 64+1, 64+63, 128+1, 128+1, 128+63, $FF
 track1_name
     db "1. Petit joueur", 0
 track2
@@ -1194,6 +1210,46 @@ digits
     db 63,48,48,12,12
     db 12,51,12,51,12
     db 12,51,60,48,15
+
+bitmap_title
+    db 80,85,85,85,0,0,84,85,85,21,0,0,0,0,0,0,0,0,64,85,5,85,21
+    db 208,255,255,127,1,0,245,255,255,95,0,0,0,0,0,0,0,0,64,255,71,255,95
+    db 80,253,247,127,1,0,84,255,253,23,85,85,85,81,85,85,21,84,85,255,69,245,95
+    db 80,255,245,95,0,0,212,127,85,21,253,255,127,81,255,255,31,245,255,255,69,255,23
+    db 208,255,255,95,0,0,253,255,255,71,255,215,127,209,255,253,23,253,223,127,209,255,23
+    db 84,255,253,95,0,0,213,95,85,69,245,247,127,84,127,253,23,213,223,127,81,253,7
+    db 244,127,253,23,0,0,253,95,85,69,255,247,95,244,127,255,69,255,215,127,80,85,5
+    db 212,127,255,23,0,64,245,95,0,80,253,255,95,212,127,255,69,245,255,95,244,255,5
+    db 85,85,85,5,0,64,85,21,0,80,85,85,21,85,85,85,81,85,85,85,84,85,1
+    db 84,85,85,5,0,0,85,21,0,64,85,85,21,84,85,85,65,85,85,21,84,85,1
+
+gear_speed
+    ; All 8 RPM positions (8x8 = 64 values) for all 5 gears (one gear per line)
+    ; For each RPM position:
+    ; byte #0: RPM (div 1000)
+    ; byte #1: speed top digit (base 10)
+    ; byte #2: speed middle digit (base 10)
+    ; byte #3: speed low digit (base 10)
+    ; byte #4: gear_speed shift when switching to a higher gear (e.g. +64 to)
+    ; byte #5: gear_speed offset when switching to a lower gear (this is because sub or sbc don't work with iy)
+    ; byte #6: acceleration
+    ; byte #7: speed (in binary)
+;    db 1,0,5,0,64,0,2,10,     2,0,10,0,56,0,4,20,   3,0,15,0,48,0,8,30,   4,0,20,0,40,0,8,40,   5,0,20,25,32,0,4,45,    6,0,25,0,24,0,2,50,   7,0,25,25,16,0,1,55,      8,0,30,0,16,0,0,60
+;    db 1,0,25,0,64,40,0,50,   2,0,30,0,56,56,4,60,  3,0,35,0,48,56,8,70,  4,0,40,0,40,56,8,80,  5,0,40,25,32,56,4,85,   6,0,45,0,24,56,2,90,  7,0,45,25,16,56,1,95,     8,5,0,0,16,56,0,100
+;    db 1,0,45,0,64,104,0,90,  2,5,0,0,56,120,4,100, 3,5,5,0,48,120,8,110, 4,5,10,0,40,120,8,120,5,5,10,25,32,120,4,125, 6,5,15,0,24,120,2,130,7,5,15,25,16,120,1,135,   8,5,20,0,16,120,0,140
+;    db 1,5,15,0,64,168,0,130, 2,5,20,0,56,184,4,140,3,5,25,0,48,184,8,150,4,5,30,0,40,184,8,160,5,5,30,25,32,184,4,165, 6,5,35,0,24,184,2,170,7,5,35,25,16,184,1,175,   8,5,40,0,16,184,0,180
+;    db 1,5,35,0,0,232,0,170,  2,5,40,0,0,248,4,180, 3,5,45,0,0,248,8,190, 4,10,0,0,0,248,8,200, 5,10,0,25,0,248,4,205,  6,10,5,0,0,248,2,210, 7,10,5,25,0,248,1,215,    8,10,10,0,0,248,0,220
+    db 1,0,5,0,0,0,8,10,  2,0,10,0,0,0,8,20,  3,0,15,0,0,0,8,30,  4,0,20,0,40,0,8,40,  5,0,25,0,40,0,4,50,  6,0,30,0,40,0,2,60,  7,0,35,0,40,0,1,70,  8,0,40,0,40,0,0,80
+    db 1,0,20,0,0,24,0,40,  2,0,25,0,0,32,4,50,  3,0,30,0,0,40,8,60,  4,0,35,0,40,48,8,70,  5,0,40,0,40,56,4,80,  6,0,45,0,40,56,2,90,  7,5,0,0,40,56,1,100,  8,5,5,0,40,56,0,110
+    db 1,0,35,0,0,88,0,70,  2,0,40,0,0,96,4,80,  3,0,45,0,0,104,8,90,  4,5,0,0,40,112,8,100,  5,5,5,0,40,120,4,110,  6,5,10,0,40,120,2,120,  7,5,15,0,40,120,1,130,  8,5,20,0,40,120,0,140
+    db 1,5,0,0,0,152,0,100,  2,5,5,0,0,160,4,110,  3,5,10,0,0,168,8,120,  4,5,15,0,40,176,8,130,  5,5,20,0,40,184,4,140,  6,5,25,0,40,184,2,150,  7,5,30,0,40,184,1,160,  8,5,35,0,40,184,0,170
+    db 1,5,15,0,0,216,0,130,  2,5,20,0,0,224,4,140,  3,5,25,0,0,232,8,150,  4,5,30,0,0,240,8,160,  5,5,35,0,0,248,4,170,  6,5,40,0,0,248,2,180,  7,5,45,0,0,248,1,190,  8,10,0,0,0,248,0,200
+
+turn_shift
+    db 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    db 9,8,8,8,8,8,8,7,7,7,7,7,7,6,6,6,6,6,6,6,6,5,5,5,5,5,5,5,5,5,4,4,4,4,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+    db 17,16,16,16,15,15,14,14,13,13,13,12,12,12,11,11,11,10,10,10,10,9,9,9,9,8,8,8,8,7,7,7,7,7,6,6,6,6,6,6,5,5,5,5,5,5,5,4,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+    db 27,26,25,25,24,23,22,21,21,20,19,19,18,18,17,16,16,15,15,14,14,13,13,13,12,12,11,11,11,10,10,10,9,9,9,8,8,8,8,7,7,7,7,6,6,6,6,6,5,5,5,5,5,5,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1
 
 ENDIF
     END
