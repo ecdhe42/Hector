@@ -42,5 +42,13 @@ elif sys.argv[1] == '2':
         k7.write(bytes(header))
         total_bytes += 7
         print(total_bytes)
+elif sys.argv[1] == '3':
+    with open("afond.K7", "wb") as k7:
+        write_bloc(k7, "afond_k7.bin", 0x41)
+        write_bloc(k7, "afond_upper_ram.bin", 0x60)
+        header = [5, 0, 0x4C, 0, 0xC0, 0xFD]
+        k7.write(bytes(header))
+        total_bytes += 7
+        print(total_bytes)
 else:
     print("Unknown args", sys.argv)
