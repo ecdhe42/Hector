@@ -7,7 +7,7 @@ PUTSTR  equ 0D0Ch
 CLS     equ 0D2Fh
 SETCOLS equ 19E0h
 COLORS  equ 0BD3h
-FPS     equ 28
+FPS     equ 30
 
 IF K7
 include "afond_upper_ram_include.asm"
@@ -218,7 +218,7 @@ draw_init_gearbox_icon:
     jp nz, draw_init_gearbox_icon
 
 ; ######################################################################################
-
+    di
 ;splash_loop:
 ;    ld hl, 03800h
 ;    ld a, (hl)
@@ -327,9 +327,10 @@ draw_track_ldir
 
     ld hl, bitmap_car       ; Save the address of the car bitmap
     ld a, h
-    ld (car_bitmap_h), a
-    ld a, l
     ld (car_bitmap_l), a
+    ld a, l
+    ld (car_bitmap_h), a
+
 
     ld a, (car_bump)            ; If car_bump is set, we only draw 21
     cp 1
@@ -374,26 +375,18 @@ draw_track_ldir_with_car
     ld d,h
     ld e,l                  ; de += $6
 
-    ld a, (car_bitmap_h)    ; Restore the car bitmap pointer into HL
-    ld h, a
-    ld a, (car_bitmap_l)
-    ld l, a
-
-    ld bc, 1
+    ld sp, (car_bitmap_h)   ; The stack pointer points to the sprite data
 REPT 12
-    ld a, (de)              ; a = background
-    and (hl)                ; a = background & mask
-    add hl, bc
-    or (hl)                 ; a = (background & mask) | car
-    add hl, bc
-    ld (de), a
+    pop bc                  ; B = sprite value, C = mask value
+    ld a, (de)              ; A = background
+    and c                   ; A = background & mask
+    or b                    ; A = (background & mask) | car
+    ld (de), a              ; Store byte back on the screen
     inc e
 ENDM
+    ld (car_bitmap_h), sp
+    ld sp, 0BFFCh
 
-    ld a, h
-    ld (car_bitmap_h), a    ; Save the car bitmap pointer (post ldir)
-    ld a, l
-    ld (car_bitmap_l), a
     pop af
 
     pop hl                  ; Restore the screen-aligned value of DE into HL
