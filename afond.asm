@@ -7,7 +7,7 @@ PUTSTR  equ 0D0Ch
 CLS     equ 0D2Fh
 SETCOLS equ 19E0h
 COLORS  equ 0BD3h
-FPS     equ 20
+FPS     equ 28
 
 IF K7
 include "afond_upper_ram_include.asm"
@@ -257,8 +257,7 @@ store_new_bg_shift:
 
     ld a,30                         ; Set the counter to 30 lines to be drawn (background mountains)
 draw_bg_loop:
-    ld bc,$40
-    ldir
+    call copy_line
 
     ld bc,$40
     add hl,bc
@@ -312,8 +311,7 @@ done_shift_track:
 draw_track_ldir
     ld h, (ix)              ; hl = pointer
     ld l, (ix+1)
-    ld bc, 00040h
-    ldir
+    call copy_line
     pop hl
     ld bc,$40
     add hl,bc
@@ -365,8 +363,7 @@ done_shift_track_with_car:
 draw_track_ldir_with_car
     ld h, (ix)              ; hl = pointer
     ld l, (ix+1)
-    ld bc, 00040h
-    ldir
+    call copy_line
     pop hl                  ; Restore the screen-aligned value of DE into HL
     push hl                 ; Save it again
     push af
@@ -1066,6 +1063,12 @@ turn_less_left:
 
     jp end_check_road_turn
 
+
+copy_line:
+REPT 64
+    ldi
+ENDM
+    ret
 
 display_digit:
     ld bc,64
