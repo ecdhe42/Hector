@@ -24,6 +24,7 @@ A noter que l'assemblable demande quelques différences entre ces deux formats:
 
 - Les `.bin` démarrent par défaut à l'adresse `$4200` alors que les `.K7` démarrent à `$4C00` (d'où une directive `org` différente selon que le symbole `K7` est à 0 ou 1)
 - Le code assembleur pour générer les `.bin` contient à la fois le code (addresse `$4200`) mais également les ressources graphiques chargées à l'adresse `$6000`. Pour les fichiers `K7` ce sont deux fichiers `.bin` distincts qui sont générés et fusionnés dans un fichier `.K7` (voir [create_K7.py](create_K7.py))
+- "A fond! A fond! A fond!" prenant tant de mémoire, le bloc RAM à l'adresse `$6000-$C000` est quasiment rempli. Mais le bloc à l'adresse `$4000-$5FA0` étant lui aussi près d'être plein, le fichier K7 doit charger des ressources à l'adresse `$4100` (tout ce qui se trouve dans `afond_lower_ram.asm`) étant donné que le code commence à l'adresse `$4C00`.
 
 ## Scrolling de base
 

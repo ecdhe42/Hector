@@ -33,10 +33,10 @@ hello.bin: hello.asm rsc.asm
 olipix.bin: olipix.asm
 	pasmo.exe olipix.asm olipix.bin
 
-afond.bin: afond.asm rsc_afond.asm rsc_afond_bg.asm afond_bitmap_ptr.asm
+afond.bin: afond.asm rsc_afond.asm rsc_afond_bg.asm afond_bitmap_ptr.asm afond_upper_ram.asm afond_lower_ram.asm
 	pasmo.exe -E K7=0 afond.asm afond.bin afond.sym
 
-afond_k7.bin: afond.asm rsc_afond.asm rsc_afond_bg.asm afond_bitmap_ptr.asm afond_upper_ram_include.asm
+afond_k7.bin: afond.asm rsc_afond.asm rsc_afond_bg.asm afond_bitmap_ptr.asm afond_upper_ram_include.asm afond_lower_ram.asm
 	pasmo.exe -E K7=1 afond.asm afond_k7.bin afond_k7.sym
 
 afond_upper_ram_include.asm: afond_upper_ram.asm rsc_afond.asm rsc_afond_bg.asm rsc_afond_needles.asm afond_bitmap_ptr.asm

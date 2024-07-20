@@ -7,16 +7,12 @@ PUTSTR  equ 0D0Ch
 CLS     equ 0D2Fh
 SETCOLS equ 19E0h
 COLORS  equ 0BD3h
-FPS     equ 30
+FPS     equ 27
 
 IF K7
 include "afond_upper_ram_include.asm"
     org 4100h
-turn_shift
-    db 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    db 9,8,8,8,8,8,8,7,7,7,7,7,7,6,6,6,6,6,6,6,6,5,5,5,5,5,5,5,5,5,4,4,4,4,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-    db 17,16,16,16,15,15,14,14,13,13,13,12,12,12,11,11,11,10,10,10,10,9,9,9,9,8,8,8,8,7,7,7,7,7,6,6,6,6,6,6,5,5,5,5,5,5,5,4,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-    db 27,26,25,25,24,23,22,21,21,20,19,19,18,18,17,16,16,15,15,14,14,13,13,13,12,12,11,11,11,10,10,10,9,9,9,8,8,8,8,7,7,7,7,6,6,6,6,6,5,5,5,5,5,5,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1
+include "afond_lower_ram.asm"
 
     org 4C00h
 ELSE
@@ -143,15 +139,23 @@ splash_end
     ld bc,$64
     ldir
 
-    ld de,0C000h
-    ld a, 40
 draw_sky:
-    ld hl,sky
-    ld bc,$80
+    ld hl,0C000h
+    ld de,0C001h
+    ld bc,$40
+    ld a, $EE
+    ld (hl), a                      ; Set the first byte of the first line to be $EE
+    ldir                            ; Copy a whole line one byte right, i.e. write the whole line with $EE
+    ld a, $BB
+    ld (hl), a                      ; Set the first byte of the second line to be $BB
+    ld bc,$40
+    ldir                            ; Repeat the operation
+
+    ld hl,0C000h                    ; Copy the first two lines for 38 more lines by using a similar trick
+    ld de,0C080h
+    ld bc,00800h
     ldir
-    dec a
-    cp 0
-    jp nz, draw_sky
+end_draw_sky
 
     ld a, 28
     ld hl,bitmap_gauge
@@ -219,15 +223,6 @@ draw_init_gearbox_icon:
 
 ; ######################################################################################
     di
-;splash_loop:
-;    ld hl, 03800h
-;    ld a, (hl)
-;    cp $ff
-;    jp z, splash_loop
-;splash_end
-;    ld a, (hl)
-;    cp $ff
-;    jp nz, splash_end
 
     ld iy, (gear_speed_ptr)         ; iy = &gear_speed
     jp draw_speed_rpm
@@ -276,24 +271,189 @@ draw_bg_loop:
     ld de, 0D080h
     ld a, 1
     ld (car_bump), a
+    ld a, 98                ; Set the counter to 98 lines to be drawn
+    ld (track_line), a
     jp set_draw_track
 bump1
     ld a, 2
     ld (car_bump), a
 no_bump:
-    ld de, 0D000h
+    ld de, 0D000h           ; DE = destination pointer, i.e. the screen
+    ld a, 100               ; Set the counter to 100 lines to be drawn
+    ld (track_line), a
 set_draw_track:
-    ld hl, bitmap+$1900
-    ld iy, (turn_shift_ptr)
-    ld a, 75                       ; Set the counter to 75+25=100 lines to be drawn (75 for the track, 25 for track+car)
+    ld hl, bitmap+$1900     ; HL = source pointer, i.e. track bitmap
+    ld iy, (turn_shift_ptr) ; iy = pointer to the turn byte shift table
 
+    ld a, 0                 ; Resets test_cars_collision flag
+    ld (test_cars_collision), a
+    ld a, (other_car_y_max)
+    ld (other_car_y), a     ; Other car starts at offset other_car_y_max
+    dec a
+    ld (other_car_y_max), a
+    cp -76
+    jp nz, other_car_settings
+    ld a, -28
+    ld (other_car_y_max), a
+other_car_settings:
+    add a, 28
+    and a
+    add a, 8
+    jp nc, check_zone_1
+zone0:
+    ld hl, other_car_draw0
+    ld (other_car_draw), hl ; Routine to draw
+    ld hl, bitmap_cars_others0
+    ld (other_car_ptr), hl  ; Pointer to the bitmap
+    ld a, 8                 ; Set other car height
+    jp other_car_turn
+check_zone_1:
+    add a, 8
+    jp nc, check_zone_2
+zone1:
+    ld hl, other_car_draw1
+    ld (other_car_draw), hl ; Routine to draw
+    ld hl, bitmap_cars_others1
+    ld (other_car_ptr), hl  ; Pointer to the bitmap
+    ld a, 13                ; Set other car height
+    jp other_car_turn
+check_zone_2:
+    add a, 8
+    jp nc, check_zone_3
+zone2:
+    ld hl, other_car_draw2
+    ld (other_car_draw), hl ; Routine to draw
+    ld hl, bitmap_cars_others2
+    ld (other_car_ptr), hl  ; Pointer to the bitmap
+    ld a, 17                ; Set other car height
+    jp other_car_turn
+check_zone_3:
+    add a, 8
+    jp nc, zone_4
+zone3:
+    ld hl, other_car_draw3
+    ld (other_car_draw), hl ; Routine to draw
+    ld hl, bitmap_cars_others3
+    ld (other_car_ptr), hl  ; Pointer to the bitmap
+    ld a, 21                ; Set other car height
+    jp other_car_turn
+zone_4:
+    ld hl, other_car_draw4
+    ld (other_car_draw), hl ; Routine to draw
+    ld hl, bitmap_cars_others4
+    ld (other_car_ptr), hl  ; Pointer to the bitmap
+    add a, 8
+    jp c, zone_4_end
+    ld a, 1
+    ld (test_cars_collision), a
+zone_4_end:
+    ld a, 25                ; Set other car height
+
+other_car_turn:
+    push iy                 ; We need to know what byte offset depending of the car Y position
+    ld c, a                 ; C = other car height
+    ld a, (other_car_y)     ; A = other_car_y (from -28 to 103)
+    ld b, a                 ; B = A
+    ld a, $FF
+    sub b                   ; A = 255 - other_car_y (from )
+    add a, c                ; A = 255 - other_car_y + other_car_height
+    ld c, a                 ; C = 255 - other_car_y + other_car_height
+    ld b, 0
+    add iy, bc              ; We look at line C inside the turn_shift table
+    ld a, (iy)              ; A = turn shift (in bytes)
+    pop iy
+
+    ld b, a                 ; B = turn byte shift
+    ld a, (turn_dir)        ; Depending of the turn direction, we add or subtract B
+    cp 0
+    ld a, 30                ; A = Other car default offset = 30
+    jp z, other_car_turn_right
+    sub b                   ; A = 30 - turn byte shift
+    jp other_car_turn_done
+other_car_turn_right:
+    add a, b                ; A = 30 + turn byte shift
+other_car_turn_done:
+    ld (other_car_x), a     ; other_car_x = 30 +- turn byte shift
+
+cars_collision_detection:
+    ld a, (test_cars_collision)
+    cp 0
+    jp z, end_cars_collision_detection
+    and a                   ; Clear carry flag
+    ld a, (other_car_x)
+    ld b, a                 ; B = other_car_x
+    ld a, (car_x)           ; A = car_x
+    sub b                   ; A = car_x - other_car_x
+    jp nc, other_car_on_the_left
+    ld b, a                 ; If A < 0
+    ld a, $FF               ; A = $FF - A
+    sub b
+other_car_on_the_left:
+    and a
+    sub 11
+    jp nc, end_cars_collision_detection
+cars_crash:
+    push iy
+    ld iy, gear_speed
+    ld (gear_speed_ptr), iy     ; Down to first RPM of first gear
+    pop iy
+    ld a, 0
+    ld (gear), a                ; Down to first gear (gear=0)
+    ld de, $E2C0
+    ld a, (car_x)
+    add a, e
+    ld e, a                     ; DE = 0xE2C0 + car_x
+
+    ld hl, bitmap_cars_collision
+    ld a, h
+    ld (car_bitmap_l), a
+    ld a, l
+    ld (car_bitmap_h), a        ; car_bitmap_h = &bitmap_cars_collision
+
+    ld a, 25
+    ld (other_car_height), a    ; Used for the number of iterations
+
+    ld sp, (car_bitmap_h)   ; The stack pointer points to the sprite data
+draw_cars_collision:
+REPT 12
+    pop bc                  ; B = sprite value, C = mask value
+    ld a, (de)              ; A = background
+    and c                   ; A = background & mask
+    or b                    ; A = (background & mask) | car
+    ld (de), a              ; Store byte back on the screen
+    inc e
+ENDM
+
+    ex de, hl
+    ld bc, 64-12
+    add hl, bc
+    ex de, hl               ; DE += 52 (next line)
+    ld a, (other_car_height)
+    dec a
+    ld (other_car_height), a
+    jp nz, draw_cars_collision
+    ld sp, 0C000h
+
+    ld a, -28
+    ld (other_car_y_max), a     ; Reset other car Y position
+    ld bc, $FFFF    ; Delay
+    call DELAY      ; Wait
+    jp draw_frame
+end_cars_collision_detection
+
+setup_car:
+    ld hl, bitmap_car       ; Save the address of the car bitmap
+    ld a, h
+    ld (car_bitmap_l), a
+    ld a, l
+    ld (car_bitmap_h), a
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 draw_track:
-    push de                 ; We save the screen-aligned value of de
-    ld h,d
-    ld l,e
+    push de                 ; We save the screen-aligned value of DE
+    ex de, hl               ; HL = destination address
     ld b,0
-    ld c,(iy)
-    push af                 ; Save register A
+    ld c,(iy)               ; BC = gear_speed_ptr
     ld a, (turn_dir)
     cp 0
     jp nz, shift_track_left
@@ -304,77 +464,51 @@ shift_track_left:
     sbc hl,bc               ; If we veer left, substract the shift from the destination ptr
 
 done_shift_track:
-    pop af                  ; Restore register A
-    ld d,h
-    ld e,l                  ; de += pixel shift
+    ex de, hl               ; de += pixel shift
 
-draw_track_ldir
-    ld h, (ix)              ; hl = pointer
+draw_track_line
+    ld h, (ix)              ; HL = pointer to the track bitmap
     ld l, (ix+1)
-    call copy_line
-    pop hl
-    ld bc,$40
-    add hl,bc
-    ld d,h
-    ld e,l                  ; de += $40 (before the ldir command)
-    dec a                   ; number of lines--
-    inc ix                  ; next bitmap address
-    inc ix
-    inc iy                  ; next turn shift
+    call copy_line          ; Copies 64 bytes from HL to DE and increments both pointers
+    pop de                  ; DE = left-aligned address on the screen
+    push de                 ; Make two copies of DE in the stack
+
+draw_other_car_line
+    ld a, (other_car_y)     ; A = other_car_y
     cp 0
-    jp nz, draw_track
-; END DRAW TRACK
+    jp m, end_draw_other_car_line   ; If other_car_y < 0, skip section
+    ld hl, (other_car_draw) ; HL = pointer
+    ld b, a                 ; B = other_car_y
+    ld a, (other_car_x)
+    add a, e
+    ld e, a
+    jp (hl)                 ; Call the routine to draw the other car line
+draw_other_car_line2:
+    ld a, (other_car_y)
+end_draw_other_car_line:
+    inc a
+    ld (other_car_y), a
 
-    ld hl, bitmap_car       ; Save the address of the car bitmap
-    ld a, h
-    ld (car_bitmap_l), a
-    ld a, l
-    ld (car_bitmap_h), a
-
-
-    ld a, (car_bump)            ; If car_bump is set, we only draw 21
+check_if_draw_car:
+    and a                               ; Clear carry bit
+    ld a, (car_bump)
     cp 1
-    jp nz, end_car_bump_adjust
-    ld a, 23                    ; We only draw 21 lines instead of 23
-    jp draw_track_with_car      ; as we started 2 lines down
-end_car_bump_adjust:
-    ld a, 25
+    ld a, (track_line)                  ; A = track_line
+    jp z, draw_car_with_bump
+    sub 26                              ; A -= 26
+    jp check_if_draw_car_with_bump
+draw_car_with_bump:
+    sub 24
+check_if_draw_car_with_bump:
+    jp nc, end_draw_car                 ; If no carry bit (i.e. track_line >= 26) then we don't draw the car yet
 
-draw_track_with_car:
-    push de                 ; We save the screen-aligned value of de
-    ld h,d
-    ld l,e
-    ld b,0
-    ld c,(iy)
-    push af                 ; Save register A
-    ld a, (turn_dir)
-    cp 0
-    jp nz, shift_track_left_with_car
-    add hl,bc               ; If we veer right, add the shift to the destination ptr
-    jp done_shift_track_with_car
-shift_track_left_with_car:
-    and a
-    sbc hl,bc               ; If we veer left, substract the shift from the destination ptr
-
-done_shift_track_with_car:
-    pop af                  ; Restore register A
-    ld d,h
-    ld e,l                  ; de += pixel shift
-
-draw_track_ldir_with_car
-    ld h, (ix)              ; hl = pointer
-    ld l, (ix+1)
-    call copy_line
-    pop hl                  ; Restore the screen-aligned value of DE into HL
-    push hl                 ; Save it again
-    push af
+draw_car:
     ld a, (car_x)
-    ld b,0
-    ld c,a
-    add hl,bc
-    ld d,h
-    ld e,l                  ; de += $6
-
+    ld b, a                 ; B = car_x
+    ld a, e                 ; A = E (lower byte of screen address)
+    and $C0                 ; Align A to the left of the screen
+    add a, b                ; A += car_x
+    ld e, a                 ; DE = screen address (left-aligned) + car_x
     ld sp, (car_bitmap_h)   ; The stack pointer points to the sprite data
 REPT 12
     pop bc                  ; B = sprite value, C = mask value
@@ -385,22 +519,31 @@ REPT 12
     inc e
 ENDM
     ld (car_bitmap_h), sp
-    ld sp, 0BFFCh
+    ld sp, 0BFFEh           ; Restore the stack (BEWARE: need to make sure it's the right value)
+end_draw_car
 
-    pop af
-
-    pop hl                  ; Restore the screen-aligned value of DE into HL
+prepare_next_track_line:
+    pop hl                  ; HL = destination pointer (screen-aligned)
     ld bc,$40
-    add hl,bc
-    ld d,h
-    ld e,l                  ; de += $40 (before the ldir command)
+    add hl,bc               ; HL += $40
+    ex de, hl               ; DE += $40 (before the ldir command)
 
-    dec a                   ; number of lines--
     inc ix                  ; next bitmap address
     inc ix
     inc iy                  ; next turn shift
+    ld a, (track_line)
+    dec a                   ; number of lines--
+    ld (track_line), a
     cp 0
-    jp nz, draw_track_with_car
+    jp nz, draw_track
+end_draw_track
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    ld hl, bitmap_car       ; Save the address of the car bitmap
+    ld a, h
+    ld (car_bitmap_l), a
+    ld a, l
+    ld (car_bitmap_h), a
 
     ld a, (car_bump)                    ; If car_bump is set
     cp 1
@@ -409,8 +552,6 @@ ENDM
     inc ix
     inc ix
     inc ix
-;    inc iy
-;    inc iy
 end_car_bump_post_adjust:
 
 animate_car_wheels:
@@ -420,13 +561,6 @@ animate_car_wheels:
     sra a
     sra a
     ld b, a                             ; B = (frame MOD 8) >> 2
-;    bit 2, a
-;    jp nz, animate_car_wheel_higher
-;    ld b, 0
-;    jp animate_car_wheel_draw
-;animate_car_wheel_higher:
-;    ld b, 1
-;animate_car_wheel_draw:
     ld a, (frame)                       ; We use the frame count
     and $7                              ; A = frame MOD 8
     sla a
@@ -446,10 +580,6 @@ animate_car_wheels:
     ld bc, 9
     add iy, bc
     ld (iy), a
-
-    nop
-    nop
-    nop
 
     ld iy, (gear_speed_ptr)     ; iy = &gear_speed
 
@@ -1063,6 +1193,101 @@ REPT 64
 ENDM
     ret
 
+other_car_draw0:
+    ld a, (other_car_y)
+    cp 7
+    jp nz, other_car_draw0_line
+    ld a, -100
+    ld (other_car_y), a
+other_car_draw0_line:
+    ld hl, (other_car_ptr)
+    ldi
+    ldi
+    ldi
+    ldi
+    ld (other_car_ptr), hl
+    jp end_draw_other_car_line
+
+other_car_draw1:
+    ld a, (other_car_y)
+    cp 12
+    jp nz, other_car_draw1_line
+    ld a, -100
+    ld (other_car_y), a
+other_car_draw1_line:
+    ld hl, (other_car_ptr)
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ld (other_car_ptr), hl
+    jp end_draw_other_car_line
+
+other_car_draw2:
+    ld a, (other_car_y)
+    cp 16
+    jp nz, other_car_draw2_line
+    ld a, -100
+    ld (other_car_y), a
+other_car_draw2_line:
+    ld hl, (other_car_ptr)
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ld (other_car_ptr), hl
+    jp end_draw_other_car_line
+
+other_car_draw3:
+    ld a, (other_car_y)
+    cp 20
+    jp nz, other_car_draw3_line
+    ld a, -100
+    ld (other_car_y), a
+other_car_draw3_line:
+    ld hl, (other_car_ptr)
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ld (other_car_ptr), hl
+    jp end_draw_other_car_line
+
+other_car_draw4:
+    ld a, (other_car_y)
+    cp 24
+    jp nz, other_car_draw4_line
+    ld a, -100
+    ld (other_car_y), a
+other_car_draw4_line:
+    ld hl, (other_car_ptr)
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ldi
+    ld (other_car_ptr), hl
+    jp end_draw_other_car_line
+
 display_digit:
     ld bc,64
     ld a, (de)
@@ -1107,6 +1332,12 @@ car_bump        db 0
 car_x           db $16
 car_bitmap_h    db 0
 car_bitmap_l    db 0
+other_car_y     db 0
+other_car_height db 0
+other_car_x     db 30
+other_car_y_max db -28
+other_car_ptr   db 0, 0
+other_car_draw  db 0, 0
 dist            db 10
 frame           db 12
 bg_shift        db 0
@@ -1117,15 +1348,17 @@ minutes_high    db 0
 time_counter    db FPS
 track_counter   db 0
 track_steps     db 10
+track_line      db 0
 gear            db 0
 clutch_down     db 0
 gear_rpm        db 16
 gear_refresh    db 0
 gear_speed_offset    db 0
 gear_speed_ptr  db 0, 0
+test_cars_collision  db 0
 
 variables_backup:
-    db 0, 0, 0, 0, 0, 0, $16, 0, 0, 10, 12, 0, 0, 0, 0, 0, FPS, 0, 10, 0, 0, 16, 0, 0, 0, 0
+    db 0, 0, 0, 0, 0, 0, $16, 0, 0, 0, 0, 30, -28, 0, 0, 0, 0, 10, 12, 0, 0, 0, 0, 0, FPS, 0, 10, 0, 0, 0, 16, 0, 0, 0, 0, 0
 
 track1
     ; Bit 0: are we turning left
@@ -1148,102 +1381,10 @@ track2_name
 
 track_ptr   db 0, 0
 
-car_x_bump
-    ; Given the value of car_x, what's the value of car_bump
-    db 1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,1,1,1,1,1,1,1
-
-sky
-    db $EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE
-    db $EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE
-    db $BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB
-    db $BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB,$BB
-
-bitmap_gauge
-    db 0,0,0,0,255,255,0,0,0,0,0,0,0,255,0,3,255,0,0,0
-    db 0,0,240,3,0,3,192,15,0,0,0,0,15,12,0,3,48,240,0,0
-    db 0,192,0,12,0,0,48,0,3,0,0,48,0,0,0,3,0,0,12,0
-    db 0,60,0,48,0,3,12,0,60,0,0,195,3,48,0,0,12,192,195,0
-    db 192,0,0,0,0,0,0,0,0,3,192,0,48,0,0,0,0,12,0,3
-    db 48,0,0,0,0,0,0,0,0,12,48,0,0,0,0,0,0,0,0,4
-    db 204,3,0,0,0,0,0,0,64,17,12,240,0,0,0,0,0,0,15,16
-    db 12,0,0,0,0,0,0,0,0,16,12,0,0,0,0,0,0,0,0,16
-    db 3,0,0,0,0,0,0,0,0,64,3,0,0,0,0,0,0,0,0,64
-    db 3,0,0,0,0,0,0,0,0,64,255,60,0,0,0,0,0,0,60,85
-    db 3,0,0,0,0,0,0,0,0,64,3,0,0,0,0,0,0,0,0,64
-    db 3,0,0,0,0,0,0,0,0,64,3,0,0,0,0,0,0,0,0,64
-    db 12,240,0,0,192,3,0,0,15,16,12,3,0,0,240,15,0,0,64,16
-    db 240,0,0,0,240,15,0,0,0,5,0,0,0,0,192,3,0,0,0,0
-
-bitmap_gearbox_icon
-    db $00,$FF,$00
-    db $F0,$00,$0F
-    db $0C,$00,$30
-    db $CC,$30,$3C
-    db $C3,$30,$CC
-    db $C3,$30,$CC
-    db $C3,$FF,$CF
-    db $C3,$30,$C0
-    db $CC,$30,$30
-    db $0C,$00,$30
-    db $F0,$00,$0F
-    db $00,$FF,$00
-
-digits
-    db 12,51,51,51,12
-    db 12,15,12,12,63
-    db 12,51,48,12,63
-    db 15,48,12,48,15
-    db 48,12,03,63,12
-    db 63,03,12,48,15
-    db 60,03,15,51,12
-    db 63,48,48,12,12
-    db 12,51,12,51,12
-    db 12,51,60,48,15
-
-bitmap_title
-    db 80,85,85,85,0,0,84,85,85,21,0,0,0,0,0,0,0,0,64,85,5,85,21
-    db 208,255,255,127,1,0,245,255,255,95,0,0,0,0,0,0,0,0,64,255,71,255,95
-    db 80,253,247,127,1,0,84,255,253,23,85,85,85,81,85,85,21,84,85,255,69,245,95
-    db 80,255,245,95,0,0,212,127,85,21,253,255,127,81,255,255,31,245,255,255,69,255,23
-    db 208,255,255,95,0,0,253,255,255,71,255,215,127,209,255,253,23,253,223,127,209,255,23
-    db 84,255,253,95,0,0,213,95,85,69,245,247,127,84,127,253,23,213,223,127,81,253,7
-    db 244,127,253,23,0,0,253,95,85,69,255,247,95,244,127,255,69,255,215,127,80,85,5
-    db 212,127,255,23,0,64,245,95,0,80,253,255,95,212,127,255,69,245,255,95,244,255,5
-    db 85,85,85,5,0,64,85,21,0,80,85,85,21,85,85,85,81,85,85,85,84,85,1
-    db 84,85,85,5,0,0,85,21,0,64,85,85,21,84,85,85,65,85,85,21,84,85,1
-
-gear_speed
-    ; All 8 RPM positions (8x8 = 64 values) for all 5 gears (one gear per line)
-    ; For each RPM position:
-    ; byte #0: RPM (div 1000)
-    ; byte #1: speed top digit (base 10)
-    ; byte #2: speed middle digit (base 10)
-    ; byte #3: speed low digit (base 10)
-    ; byte #4: gear_speed shift when switching to a higher gear (e.g. +64 to)
-    ; byte #5: gear_speed offset when switching to a lower gear (this is because sub or sbc don't work with iy)
-    ; byte #6: acceleration
-    ; byte #7: speed (in binary)
-;    db 1,0,5,0,64,0,2,10,     2,0,10,0,56,0,4,20,   3,0,15,0,48,0,8,30,   4,0,20,0,40,0,8,40,   5,0,20,25,32,0,4,45,    6,0,25,0,24,0,2,50,   7,0,25,25,16,0,1,55,      8,0,30,0,16,0,0,60
-;    db 1,0,25,0,64,40,0,50,   2,0,30,0,56,56,4,60,  3,0,35,0,48,56,8,70,  4,0,40,0,40,56,8,80,  5,0,40,25,32,56,4,85,   6,0,45,0,24,56,2,90,  7,0,45,25,16,56,1,95,     8,5,0,0,16,56,0,100
-;    db 1,0,45,0,64,104,0,90,  2,5,0,0,56,120,4,100, 3,5,5,0,48,120,8,110, 4,5,10,0,40,120,8,120,5,5,10,25,32,120,4,125, 6,5,15,0,24,120,2,130,7,5,15,25,16,120,1,135,   8,5,20,0,16,120,0,140
-;    db 1,5,15,0,64,168,0,130, 2,5,20,0,56,184,4,140,3,5,25,0,48,184,8,150,4,5,30,0,40,184,8,160,5,5,30,25,32,184,4,165, 6,5,35,0,24,184,2,170,7,5,35,25,16,184,1,175,   8,5,40,0,16,184,0,180
-;    db 1,5,35,0,0,232,0,170,  2,5,40,0,0,248,4,180, 3,5,45,0,0,248,8,190, 4,10,0,0,0,248,8,200, 5,10,0,25,0,248,4,205,  6,10,5,0,0,248,2,210, 7,10,5,25,0,248,1,215,    8,10,10,0,0,248,0,220
-    db 1,0,5,0,0,0,8,10,  2,0,10,0,0,0,8,20,  3,0,15,0,0,0,8,30,  4,0,20,0,40,0,8,40,  5,0,25,0,40,0,4,50,  6,0,30,0,40,0,2,60,  7,0,35,0,40,0,1,70,  8,0,40,0,40,0,0,80
-    db 1,0,20,0,0,24,0,40,  2,0,25,0,0,32,4,50,  3,0,30,0,0,40,8,60,  4,0,35,0,40,48,8,70,  5,0,40,0,40,56,4,80,  6,0,45,0,40,56,2,90,  7,5,0,0,40,56,1,100,  8,5,5,0,40,56,0,110
-    db 1,0,35,0,0,88,0,70,  2,0,40,0,0,96,4,80,  3,0,45,0,0,104,8,90,  4,5,0,0,40,112,8,100,  5,5,5,0,40,120,4,110,  6,5,10,0,40,120,2,120,  7,5,15,0,40,120,1,130,  8,5,20,0,40,120,0,140
-    db 1,5,0,0,0,152,0,100,  2,5,5,0,0,160,4,110,  3,5,10,0,0,168,8,120,  4,5,15,0,40,176,8,130,  5,5,20,0,40,184,4,140,  6,5,25,0,40,184,2,150,  7,5,30,0,40,184,1,160,  8,5,35,0,40,184,0,170
-    db 1,5,15,0,0,216,0,130,  2,5,20,0,0,224,4,140,  3,5,25,0,0,232,8,150,  4,5,30,0,0,240,8,160,  5,5,35,0,0,248,4,170,  6,5,40,0,0,248,2,180,  7,5,45,0,0,248,1,190,  8,10,0,0,0,248,0,200
-
 IF K7=0
-turn_shift
-    db 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    db 9,8,8,8,8,8,8,7,7,7,7,7,7,6,6,6,6,6,6,6,6,5,5,5,5,5,5,5,5,5,4,4,4,4,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-    db 17,16,16,16,15,15,14,14,13,13,13,12,12,12,11,11,11,10,10,10,10,9,9,9,9,8,8,8,8,7,7,7,7,7,6,6,6,6,6,6,5,5,5,5,5,5,5,4,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-    db 27,26,25,25,24,23,22,21,21,20,19,19,18,18,17,16,16,15,15,14,14,13,13,13,12,12,11,11,11,10,10,10,9,9,9,8,8,8,8,7,7,7,7,6,6,6,6,6,5,5,5,5,5,5,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1
+include "afond_lower_ram.asm"
 ENDIF
 
-bitmap_car:
-include "rsc_afond_car.asm"
 include "rsc_afond_cars_others.asm"
 
 end_program
