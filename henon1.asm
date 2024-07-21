@@ -685,8 +685,14 @@ display_new_row:
 scroll:
     ld hl, 0C040h       ; Move the whole screen up one line
     ld de, 0C000h
-    ld bc, 03980h
-    ldir
+    ld a, 230
+scroll_line:
+REPT 64
+    ldi
+ENDM
+    dec a
+    cp 0
+    jp nz, scroll_line
 
     ld hl, (tile_ptr)   ; Copy the new line at the end of the screen
     ld de, 0F980h
