@@ -12,11 +12,11 @@ def get_color(val):
     if val == 4:
         return 3
     
-    if val == (0, 0, 0, 0):
+    if val[3] == 0:
         return 0
     if val == (0, 0, 0, 255):
         return 0
-    if val == (255, 0, 0, 255):
+    if val == (255, 0, 0, 255) or val == (255, 0, 5, 255):
         return 1
     if val == (0, 255, 0, 255) or val == (0, 255, 0, 246):
         return 2
@@ -70,7 +70,7 @@ def convert_car():
             o.write(line.encode())
 
 def convert_competing_cars():
-    img0 = Image.open('afond_car1.png')
+    img0 = Image.open('afond_car_s0.png')
     img1 = Image.open('afond_car_s1.png')
     img2 = Image.open('afond_car_s2.png')
     img3 = Image.open('afond_car_s3.png')
