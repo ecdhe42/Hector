@@ -27,7 +27,7 @@ if len(sys.argv) < 2:
     quit()
 
 if sys.argv[1] == '1':
-    with open("henon1.K7", "wb") as k7:
+    with open("bin/henon1.K7", "wb") as k7:
         write_bloc(k7, "henon1_k7.bin", 0x4C)
         write_bloc(k7, "rsc_henon1.bin", 0x60)
         header = [5, 0, 0x4C, 0, 0xC0, 0xFD]
@@ -35,7 +35,7 @@ if sys.argv[1] == '1':
         total_bytes += 7
         print(total_bytes)
 elif sys.argv[1] == '2':
-    with open("henon2.K7", "wb") as k7:
+    with open("bin/henon2.K7", "wb") as k7:
         write_bloc(k7, "henon2_k7.bin", 0x4C)
         write_bloc(k7, "rsc_henon2.bin", 0x60)
         header = [5, 0, 0x4C, 0, 0xC0, 0xFD]
@@ -43,7 +43,7 @@ elif sys.argv[1] == '2':
         total_bytes += 7
         print(total_bytes)
 elif sys.argv[1] == '3':
-    with open("afond.K7", "wb") as k7:
+    with open("bin/afond.K7", "wb") as k7:
         write_bloc(k7, "afond_k7.bin", 0x41)
         write_bloc(k7, "afond_upper_ram.bin", 0x60)
         header = [5, 0, 0x4C, 0, 0xC0, 0xFD]
