@@ -109,7 +109,8 @@ loop:
     cp 0
     call nz, collide_with_playfield
 
-    call enemy_shoot
+;    call enemy_shoot
+    call move_enemy_ship
 
     ld hl, 05FF7H   ; Check if the player pushed the trigger button
     ld a, (hl)
@@ -117,6 +118,13 @@ loop:
     jp nz, loop
 ;    cp 0
 ;    jp z, loop
+
+;    ld a, (player_missile_col)
+;    jp z, end_missile_reset
+;    ld a, 0                 ; Reset missile position
+;    ld (missiles), a
+;    ld (player_missile_col), a
+;end_missile_reset
 
     call player_shoot
 
@@ -190,10 +198,14 @@ missile_boom:
     ld a, (hl)              ; Remove previous position
     and d
     ld (hl), a
+    ld a, 1
+    ld (player_missile_col), a
     ld a, 0                 ; Reset missile position
     ld (missiles), a
 animate_missiles_end:
     ret
+
+    include "henon1_enemy.asm"
 
 enemy_shoot:
     ; missiles+4: missile Y position (0 if no missile)
@@ -331,6 +343,21 @@ move_down_with_scroll:
     ld hl, 03808h
     ld (hl), 0
 
+update_enemy_ship_coords:
+    ld a, (enemy_ships+1)
+    cp 0
+    jp z, move_missile_down_with_scroll
+;    push hl
+    ld hl, (enemy_ships)
+    ld bc, $FFC0
+    add hl, bc      ; Move the pointer to the next line
+    ld (enemy_ships), hl
+    ld a, (enemy_ships+4)
+    dec a
+    ld (enemy_ships+4), a
+;    pop iy
+
+move_missile_down_with_scroll:
     ld a, (missiles)    ; Move the missile Y pos ine line up
     cp 0
     jp z, move_enemy_missiles_up
@@ -751,6 +778,10 @@ player_x    db 128      ; Sprite X
 player_ps   db 0        ; Sprite X pixel shift
 player_bot  db $10, $C6 ; Sprite bottom position
 player_col  db 0        ; Collision
+player_missile_col  db 0    ; Collision missile
+enemy_col   db 0        ; Enemy collision
+
+enemy_ships db 0, 0, 0, 0, 0, 0, 0, 0
 
 lives:
     db 0, 0    ; Number of lives spent
@@ -764,6 +795,41 @@ missiles:
     db $F0,0,0,$0F,1,0,$3C,1,0,$F0,1,0
 
 sprites:
+    ; Sprites (pre-shifted)
+    db 128,2,0,0,10,0,0,40,0,0,160,0
+    db 63,252,255,255,240,255,255,195,255,255,15,255
+    db 128,2,0,0,10,0,0,40,0,0,160,0
+    db 63,252,255,255,240,255,255,195,255,255,15,255
+    db 160,10,0,128,42,0,0,170,0,0,168,2
+    db 15,240,255,63,192,255,255,0,255,255,3,252
+    db 160,10,0,128,42,0,0,170,0,0,168,2
+    db 15,240,255,63,192,255,255,0,255,255,3,252
+    db 160,10,0,128,42,0,0,170,0,0,168,2
+    db 15,240,255,63,192,255,255,0,255,255,3,252
+    db 168,42,0,160,170,0,128,170,2,0,170,10
+    db 3,192,255,15,0,255,63,0,252,255,0,240
+    db 168,42,0,160,170,0,128,170,2,0,170,10
+    db 3,192,255,15,0,255,63,0,252,255,0,240
+    db 184,46,0,224,186,0,128,235,2,0,174,11
+    db 3,192,255,15,0,255,63,0,252,255,0,240
+    db 186,174,0,232,186,2,160,235,10,128,174,43
+    db 0,0,255,3,0,252,15,0,240,63,0,192
+    db 186,174,0,232,186,2,160,235,10,128,174,43
+    db 0,0,255,3,0,252,15,0,240,63,0,192
+    db 186,174,0,232,186,2,160,235,10,128,174,43
+    db 0,0,255,3,0,252,15,0,240,63,0,192
+    db 170,170,0,168,170,2,160,170,10,128,170,42
+    db 0,0,255,3,0,252,15,0,240,63,0,192
+    db 170,170,0,168,170,2,160,170,10,128,170,42
+    db 0,0,255,3,0,252,15,0,240,63,0,192
+    db 66,129,0,8,5,2,32,20,8,128,80,32
+    db 60,60,255,243,240,252,207,195,243,63,15,207
+    db 114,141,0,200,53,2,32,215,8,128,92,35
+    db 12,48,255,51,192,252,207,0,243,63,3,204
+    db 98,137,0,136,37,2,32,150,8,128,88,34
+    db 12,48,255,51,192,252,207,0,243,63,3,204
+
+enemy_sprites:
     ; Sprites (pre-shifted)
     db 128,2,0,0,10,0,0,40,0,0,160,0
     db 63,252,255,255,240,255,255,195,255,255,15,255

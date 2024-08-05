@@ -21,8 +21,8 @@ henon1_k7.bin: henon1.asm henon1_tilemap.asm
 henon2_k7.bin: henon2.asm
 	pasmo.exe -E K7=1 henon2.asm henon2_k7.bin
 
-bin/henon1.bin: henon1.asm rsc_henon1.asm henon1_tilemap.asm
-	pasmo.exe -E K7=0 henon1.asm bin/henon1.bin
+bin/henon1.bin: henon1.asm rsc_henon1.asm henon1_tilemap.asm henon1_enemy.asm
+	pasmo.exe -E K7=0 henon1.asm bin/henon1.bin henon1.sym
 
 bin/henon2.bin: henon2.asm rsc_henon2.asm
 	pasmo.exe -E K7=0 henon2.asm bin/henon2.bin
