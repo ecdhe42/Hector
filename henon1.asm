@@ -110,6 +110,7 @@ loop:
     call nz, collide_with_playfield
 
     call enemy_shoot
+;    call move_enemy_ship
 
     ld hl, 05FF7H   ; Check if the player pushed the trigger button
     ld a, (hl)
@@ -117,6 +118,13 @@ loop:
     jp nz, loop
 ;    cp 0
 ;    jp z, loop
+
+    ld a, (player_missile_col)
+    jp z, end_missile_reset
+    ld a, 0                 ; Reset missile position
+    ld (missiles), a
+    ld (player_missile_col), a
+end_missile_reset
 
     call player_shoot
 
@@ -187,13 +195,18 @@ move_missile_down:
     ld (missiles+1), hl
     ret
 missile_boom:
+;    call check_missile_enemy_collision
     ld a, (hl)              ; Remove previous position
     and d
     ld (hl), a
+;    ld a, 1
+;    ld (player_missile_col), a
     ld a, 0                 ; Reset missile position
     ld (missiles), a
 animate_missiles_end:
     ret
+
+    include "henon1_enemy.asm"
 
 enemy_shoot:
     ; missiles+4: missile Y position (0 if no missile)
@@ -257,6 +270,14 @@ enemy_missile_reset
     ld (missiles+4), a
     ret
 enemy_missile_collision:
+    push hl
+    call clear_sprite
+    pop hl
+    ld a, (hl)              ; If there is no collision, draw the missile
+    or e
+    ld (hl), a
+    call display_sprite
+    
     ld a, (player_bot+1)     ; If the high byte of the missile pointer
     cp h                    ; is different than the sprite lower pointer
     jp nz, enemy_missile_hit_playfield ; high byte, we know it missed
@@ -331,6 +352,21 @@ move_down_with_scroll:
     ld hl, 03808h
     ld (hl), 0
 
+update_enemy_ship_coords:
+    ld a, (enemy_ships+1)
+    cp 0
+    jp z, move_missile_down_with_scroll
+;    push hl
+    ld hl, (enemy_ships)
+    ld bc, $FFC0
+    add hl, bc      ; Move the pointer to the next line
+    ld (enemy_ships), hl
+    ld a, (enemy_ships+4)
+    dec a
+    ld (enemy_ships+4), a
+;    pop iy
+
+move_missile_down_with_scroll:
     ld a, (missiles)    ; Move the missile Y pos ine line up
     cp 0
     jp z, move_enemy_missiles_up
@@ -623,6 +659,25 @@ draw_explosion_x:
     ret
 
 collide_with_playfield:
+    ; Check if the enemy missile needs to be deleted
+    ld a, (missiles+4)
+    ld b, a                 ; B = enemy missile vertical position
+    ld a, (player_y)        ; A = player vertical position
+    add a, 19               ; A = vertical position of bottom of the ship + 3
+    sub b                   ; A = difference between missile position and player position
+    jp z, delete_missile
+    jp po, missile_close_no_xor
+    xor 80h
+missile_close_no_xor
+    jp m, no_delete_missile
+delete_missile
+    ld hl, (missiles+5)
+    ld a, (hl)              ; Remove previous position
+    and d
+    ld (hl), a
+    ld a, 0                 ; Reset missile position
+    ld (missiles+4), a
+no_delete_missile
     ld a, #0
     ld (player_col), a
     push iy
@@ -642,8 +697,32 @@ collide_with_playfield:
     add iy, bc
     call erase_explosion
     pop iy
-
     ret
+
+DispHL:
+    ld de, score
+	ld	bc,-100
+	call	Num1
+	ld	c,-10
+	call	Num1
+	ld	c,-1
+Num1:	ld	a,'0'-1
+Num2:	inc	a
+	add	hl,bc
+	jr	c,Num2
+	sbc	hl,bc
+    ld (de), a
+    inc de
+	ret 
+
+game_over:
+    ld hl, (lives)
+    call DispHL
+    ld de, 3089h    ; X and Y positions
+    ld bc, game_won  ; Text
+    call PUTSTR     ; Displays text on screen
+happy_ending
+    jp happy_ending
 
 display_screen:
     ld a, 15
@@ -717,6 +796,7 @@ ENDM
     ld a, (hl)              ; a = tilemap[tilemap_idx]
     cp $ff
     jp nz, no_tile_reset    ; If tile == $ff, reset tilemap_idx to 0
+    jp game_over
     ld a, 0
     ld (tilemap_idx), a
     ld b, 0             ; 
@@ -745,12 +825,21 @@ author:
     db "By the Bitmap Fils Unique", 0
 author2
     db "Copyleft Laurent Poulain 2024", 0
+game_won:
+    db "Vous avez gagne en "
+score:
+    db 0, 0, 0
+    db " vies.",0
 
 player_y    db 8        ; Sprite Y
 player_x    db 128      ; Sprite X
 player_ps   db 0        ; Sprite X pixel shift
 player_bot  db $10, $C6 ; Sprite bottom position
 player_col  db 0        ; Collision
+player_missile_col  db 0    ; Collision missile
+enemy_col   db 0        ; Enemy collision
+
+enemy_ships db 0, 0, 0, 0, 0, 0, 0, 0
 
 lives:
     db 0, 0    ; Number of lives spent
@@ -796,6 +885,41 @@ sprites:
     db 114,141,0,200,53,2,32,215,8,128,92,35
     db 12,48,255,51,192,252,207,0,243,63,3,204
     db 98,137,0,136,37,2,32,150,8,128,88,34
+    db 12,48,255,51,192,252,207,0,243,63,3,204
+
+enemy_sprites:
+    ; Sprites (pre-shifted)
+    db 64,1,0,0,5,0,0,20,0,0,80,0
+    db 63,252,255,255,240,255,255,195,255,255,15,255
+    db 64,1,0,0,5,0,0,20,0,0,80,0
+    db 63,252,255,255,240,255,255,195,255,255,15,255
+    db 80,5,0,64,21,0,0,85,0,0,84,1
+    db 15,240,255,63,192,255,255,0,255,255,3,252
+    db 80,5,0,64,21,0,0,85,0,0,84,1
+    db 15,240,255,63,192,255,255,0,255,255,3,252
+    db 80,5,0,64,21,0,0,85,0,0,84,1
+    db 15,240,255,63,192,255,255,0,255,255,3,252
+    db 84,21,0,80,85,0,64,85,1,0,85,5
+    db 3,192,255,15,0,255,63,0,252,255,0,240
+    db 84,21,0,80,85,0,64,85,1,0,85,5
+    db 3,192,255,15,0,255,63,0,252,255,0,240
+    db 116,29,0,208,117,0,64,215,1,0,93,7
+    db 3,192,255,15,0,255,63,0,252,255,0,240
+    db 117,93,0,212,117,1,80,215,5,64,93,23
+    db 0,0,255,3,0,252,15,0,240,63,0,192
+    db 117,93,0,212,117,1,80,215,5,64,93,23
+    db 0,0,255,3,0,252,15,0,240,63,0,192
+    db 117,93,0,212,117,1,80,215,5,64,93,23
+    db 0,0,255,3,0,252,15,0,240,63,0,192
+    db 85,85,0,84,85,1,80,85,5,64,85,21
+    db 0,0,255,3,0,252,15,0,240,63,0,192
+    db 85,85,0,84,85,1,80,85,5,64,85,21
+    db 0,0,255,3,0,252,15,0,240,63,0,192
+    db 129,66,0,4,10,1,16,40,4,64,160,16
+    db 60,60,255,243,240,252,207,195,243,63,15,207
+    db 177,78,0,196,58,1,16,235,4,64,172,19
+    db 12,48,255,51,192,252,207,0,243,63,3,204
+    db 145,70,0,68,26,1,16,105,4,64,164,17
     db 12,48,255,51,192,252,207,0,243,63,3,204
 
 explosion:
