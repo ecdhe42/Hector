@@ -1,3 +1,9 @@
+; enemy_ships: address on screen
+; enemy_ships+2: sprite address
+; enemy_ships+4: Y position
+; enemy_ships+5: X position
+; enemy_ships+6: pixel shift
+
 move_enemy_ship:
     push ix
     push hl
@@ -205,6 +211,7 @@ enemy_nocoll3
     pop hl
     ret
 
+; ################################################################
 clear_enemy_sprite:
     push hl
     push ix
@@ -235,4 +242,45 @@ clear_enemy_sprite_loop:
     jp nz, clear_enemy_sprite_loop
     pop ix
     pop hl
+    ret
+
+; ################################################################
+; HL = player's missile address on screen
+; DE = enemy address on screen
+check_missile_enemy_collision:
+    ; First compare horizontal positions
+    ld de, (enemy_ships)
+    ld a, e
+    and 63
+    ld b, a         ; B = enemy_ships line offset (in bytes)
+    ld a, l
+    and 63          ; A = missile line offset (in bytes)
+    cp b
+    jp z, compare_vertical_positions
+    inc b           ; Check next byte on screen
+    inc e           ; Increment E so that DE is vertically aligned with HL
+    cp b
+    jp z, compare_vertical_positions
+    inc b           ; Check next byte on screen
+    inc e           ; Increment E so that DE is vertically aligned with HL
+    cp b
+    jp nz, no_missile_enemy_collision       ; If A != B, B+1 and B+2 then there is no collision
+compare_vertical_positions:
+;    ld bc, 960
+;    ex de, hl
+;    add hl, bc
+;    ex de, hl       ; DE = address of the bottom of the enemy ship (&enemy_ships + 15*64)
+    and a           ; Reset carry bit
+    sbc hl, de      ; HL = missile address - enemy address
+    bit 7, h        ; Check H high bit. If HL < 0, it should be set
+    jp nz, no_missile_enemy_collision   ; If HL < 0, then there is no collision
+    and a           ; Reset carry bit
+    ld bc, 960
+    sbc hl, bc
+    bit 7, h        ; Check H high bit. If HL < 0, it should be set
+    jp z, no_missile_enemy_collision   ; If HL >= 0, then there is no collision
+missile_enemy_collision:
+    call enemy_ship_collision
+    ret
+no_missile_enemy_collision:
     ret
