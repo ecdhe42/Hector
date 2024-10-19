@@ -962,7 +962,7 @@ draw_speed_rpm:
     add hl, bc                  ; hl = &digit + offset
     ld d,h
     ld e,l                      ; de = hl
-    ld hl, $F413
+    ld hl, $EF14
     call display_digit
     ld a, (iy+2)                ; a = speed high digit offset
 
@@ -972,7 +972,7 @@ draw_speed_rpm:
     add hl, bc
     ld d,h
     ld e,l
-    ld hl, $F414
+    ld hl, $EF15
     call display_digit
     ld a, (iy+3)                ; a = speed high digit offset
 
@@ -981,7 +981,7 @@ draw_speed_rpm:
     add hl, bc
     ld d,h
     ld e,l
-    ld hl, $F415
+    ld hl, $EF16
     call display_digit
 
     ; Display gear
