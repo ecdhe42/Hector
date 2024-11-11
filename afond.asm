@@ -89,6 +89,7 @@ draw_title_line:
     call PUTSTR     ; Displays text on screen
 
 splash_loop:
+    call rand
     ld hl, 03801h
     ld a, (hl)
     cp $ff
@@ -289,12 +290,27 @@ set_draw_track:
     ld (test_cars_collision), a
     ld a, (other_car_y_max)
     ld (other_car_y), a     ; Other car starts at offset other_car_y_max
+    cp -28
+    jp nz, other_car_normal
+decides_whether_display_car:
+    ld a, (other_car_display)   ; other_car_display--
+    dec a
+    ld (other_car_display), a
+    cp $ff                      ; if other_car_display == $ff (i.e. it was 0 the previous frame)
+    jp nz, other_car_display_nochange
+    call rand                   ; Reset other_car_display = rand(7)+1
+    and 7
+    add a, 1
+    ld (other_car_display), a
+other_car_display_nochange:
+    ld a, (other_car_y_max)
+other_car_normal:
     dec a
     ld (other_car_y_max), a
     cp -76
     jp nz, other_car_settings
     ld a, -28
-    ld (other_car_y_max), a
+    ld (other_car_y_max), a     ; If other_car_y_max == -76, then reset it to -28
 other_car_settings:
     add a, 28
     and a
@@ -376,6 +392,9 @@ other_car_turn_done:
     ld (other_car_x), a     ; other_car_x = 30 +- turn byte shift
 
 cars_collision_detection:
+    ld a, (other_car_display)
+    cp 0
+    jp nz, end_cars_collision_detection ; If we don't display the car there's no collision detection
     ld a, (test_cars_collision)
     cp 0
     jp z, end_cars_collision_detection
@@ -436,6 +455,10 @@ ENDM
 
     ld a, -28
     ld (other_car_y_max), a     ; Reset other car Y position
+    call rand
+    and 7
+    add a, 1
+    ld (other_car_display), a
     ld bc, $FFFF    ; Delay
     call DELAY      ; Wait
     jp draw_frame
@@ -474,6 +497,10 @@ draw_track_line
     push de                 ; Make two copies of DE in the stack
 
 draw_other_car_line
+    ld a, (other_car_display)
+    cp 0
+    jp nz, end_draw_other_car_line_no_inc
+draw_other_car_line_for_real
     ld a, (other_car_y)     ; A = other_car_y
     cp 0
     jp m, end_draw_other_car_line   ; If other_car_y < 0, skip section
@@ -488,6 +515,7 @@ draw_other_car_line2:
 end_draw_other_car_line:
     inc a
     ld (other_car_y), a
+end_draw_other_car_line_no_inc
 
 check_if_draw_car:
     and a                               ; Clear carry bit
@@ -1310,6 +1338,18 @@ display_digit:
     ld (hl), a
     ret
 
+rand:
+	ld	a, (rand_seed)	; get seed
+	and	$B8		; mask non feedback bits
+	scf			; set carry
+	jp	po, rand_no_clr	; skip clear if odd
+	ccf			; complement carry (clear it)
+rand_no_clr:
+	ld	a, (rand_seed)	; get seed back
+	rla			; rotate carry into byte
+	ld	(rand_seed), a	; save back for next prn
+	ret			; done
+
 title:
     db "A FOND A FOND A FOND!", 0
 please_select:
@@ -1338,6 +1378,8 @@ other_car_x     db 30
 other_car_y_max db -28
 other_car_ptr   db 0, 0
 other_car_draw  db 0, 0
+other_car_display db 1
+other_car_display_counter   db 100
 dist            db 10
 frame           db 12
 bg_shift        db 0
@@ -1358,7 +1400,9 @@ gear_speed_ptr  db 0, 0
 test_cars_collision  db 0
 
 variables_backup:
-    db 0, 0, 0, 0, 0, 0, $16, 0, 0, 0, 0, 30, -28, 0, 0, 0, 0, 10, 12, 0, 0, 0, 0, 0, FPS, 0, 10, 0, 0, 0, 16, 0, 0, 0, 0, 0
+    db 0, 0, 0, 0, 0, 0, $16, 0, 0, 0, 0, 30, -28, 0, 0, 0, 0, 1, 100, 10, 12, 0, 0, 0, 0, 0, FPS, 0, 10, 0, 0, 0, 16, 0, 0, 0, 0, 0
+
+rand_seed       db 42
 
 track1
     ; Bit 0: are we turning left

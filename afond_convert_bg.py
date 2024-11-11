@@ -1,11 +1,11 @@
 from PIL import Image
 
-img = Image.open('afond_bg.png')
+img = Image.open('afond_bg2.png')
 
 def get_color(val):
-    if val == (0, 0, 0, 255):
+    if val == (0, 0, 0, 255) or val == (0, 0, 0):
         return 0
-    if val == (255, 0, 0, 255):
+    if val == (255, 0, 0, 255) or val == (254, 0, 0):
         return 1
     if val[0] == 0 and val[2] == 0 and val[1] > 128:
         return 2
