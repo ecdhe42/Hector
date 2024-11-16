@@ -73,3 +73,6 @@ bitmap_gearbox_icon
 
 bitmap_car:
 include "rsc_afond_car.asm"
+
+bitmap_flag:
+include "rsc_afond_flag.asm"

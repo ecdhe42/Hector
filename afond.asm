@@ -100,10 +100,18 @@ splash_loop:
     jp z, select_track2
     jp splash_loop
 select_track1:
+    ld a, 5
+    ld (track_dist1), a
+    ld a, 45
+    ld (track_dist2), a
     ld bc, track1
     ld (track_ptr), bc
     jp splash_end
 select_track2:
+    ld a, 10
+    ld (track_dist1), a
+    ld a, 25
+    ld (track_dist2), a
     ld bc, track2
     ld (track_ptr), bc
 splash_end
@@ -221,6 +229,44 @@ draw_init_gearbox_icon:
     dec a
     cp 0
     jp nz, draw_init_gearbox_icon
+
+    ld a, 26
+    ld hl,bitmap_flag
+    ld de,$EC42
+draw_flag:
+    ld bc,8
+    ldir
+    ld bc,56
+    push hl
+    ld h,d
+    ld l,e
+    add hl,bc
+    ld d,h
+    ld e,l
+    pop hl
+    dec a
+    cp 0
+    jp nz, draw_flag
+
+draw_distance:
+    ld b, 0
+    ld a, (track_dist1)
+    ld c, a
+    ld hl, digits
+    add hl, bc
+    ld d,h
+    ld e,l
+    ld hl, $F18B
+    call display_digit
+    ld a, (track_dist2)
+    ld b, 0
+    ld c, a                     ; bc = *(&gear_speed + gear_speed_offset)
+    ld hl, digits
+    add hl, bc
+    ld d,h
+    ld e,l
+    ld hl, $F18C
+    call display_digit
 
 ; ######################################################################################
     di
@@ -724,6 +770,7 @@ check_switch_gear:
     bit 3, a
     jp nz, no_switch_gear
     call switch_gear_down         ; If joystick down (bit 3 is off), switch gear down
+    jp end_check_switch_gear
 no_switch_gear:
     ld a, 0
     ld (clutch_down), a     ; Reset clutch down flag
@@ -800,6 +847,38 @@ next_track_step:
     ld (track_steps), a            ; track_steps--
     cp 0
     jp nz, end_update_track_position    ; if track_steps > 0, skip section
+
+    ; Decrease the distance counter
+    ld a, (track_dist2)
+    cp 0
+    jp nz, update_track_dist2   ; If the single digit is not 0, only update digit 2
+    ld a, 50                    ; Otherwise track_dist2=50
+    ld (track_dist2), a
+    ld a, (track_dist1)
+    add a, 251                  ; track_dist1 -= 5
+    ld (track_dist1), a
+    ; Display digit 1
+    ld b, 0
+    ld c, a
+    ld hl, digits
+    add hl, bc
+    ld d,h
+    ld e,l
+    ld hl, $F18B
+    call display_digit
+    ld a, (track_dist2)
+update_track_dist2:
+    add a, 251                  ; track_dist2 -= 5
+    ld (track_dist2), a
+    ld b, 0
+    ld c, a                     ; bc = track_dist2
+    ld hl, digits
+    add hl, bc
+    ld d,h
+    ld e,l
+    ld hl, $F18C
+    call display_digit
+end_update_track_dist
 
     ld bc, (track_ptr)          ; Get the new track (bc=*track_ptr)
     ld a, (bc)
@@ -1391,6 +1470,9 @@ time_counter    db FPS
 track_counter   db 0
 track_steps     db 10
 track_line      db 0
+track_dist      db 0
+track_dist1     db 0
+track_dist2     db 0
 gear            db 0
 clutch_down     db 0
 gear_rpm        db 16
@@ -1400,7 +1482,7 @@ gear_speed_ptr  db 0, 0
 test_cars_collision  db 0
 
 variables_backup:
-    db 0, 0, 0, 0, 0, 0, $16, 0, 0, 0, 0, 30, -28, 0, 0, 0, 0, 1, 100, 10, 12, 0, 0, 0, 0, 0, FPS, 0, 10, 0, 0, 0, 16, 0, 0, 0, 0, 0
+    db 0, 0, 0, 0, 0, 0, $16, 0, 0, 0, 0, 30, -28, 0, 0, 0, 0, 1, 100, 10, 12, 0, 0, 0, 0, 0, FPS, 0, 10, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0
 
 rand_seed       db 42
 
@@ -1421,7 +1503,7 @@ track1_name
 track2
     db 129,129,191,65,65,65,65,65,127,129,129,129,129,129,191,65,65,65,65,65,127,129,129,191,$FF
 track2_name
-    db "2. Jaitaibourrai", 0
+    db "2. Rapide et venere", 0
 
 track_ptr   db 0, 0
 
