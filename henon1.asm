@@ -110,21 +110,11 @@ loop:
     call nz, collide_with_playfield
 
     call enemy_shoot
-;    call move_enemy_ship
 
-    ld hl, 05FF7H   ; Check if the player pushed the trigger button
+    ld hl, 03800h   ; Check if the player pushed the trigger button
     ld a, (hl)
-    bit 7, a
-    jp nz, loop
-;    cp 0
-;    jp z, loop
-
-    ld a, (player_missile_col)
-    jp z, end_missile_reset
-    ld a, 0                 ; Reset missile position
-    ld (missiles), a
-    ld (player_missile_col), a
-end_missile_reset
+    cp $ff
+    jp z, loop
 
     call player_shoot
 
@@ -205,8 +195,6 @@ missile_boom:
     ld (missiles), a
 animate_missiles_end:
     ret
-
-    include "henon1_enemy.asm"
 
 enemy_shoot:
     ; missiles+4: missile Y position (0 if no missile)
@@ -659,18 +647,15 @@ draw_explosion_x:
     ret
 
 collide_with_playfield:
-    ; Check if the enemy missile needs to be deleted
-    ld a, (missiles+4)
-    ld b, a                 ; B = enemy missile vertical position
-    ld a, (player_y)        ; A = player vertical position
-    add a, 19               ; A = vertical position of bottom of the ship + 3
-    sub b                   ; A = difference between missile position and player position
-    jp z, delete_missile
-    jp po, missile_close_no_xor
-    xor 80h
-missile_close_no_xor
-    jp m, no_delete_missile
-delete_missile
+    ld a,(missiles+4)        ; If there is an enemy missile, delete it
+    cp 0
+    jp z, no_delete_missile
+ delete_missile
+    ld a,(missiles+7)       ; Download the missile shape and mask
+    ld e,a                  ; e=missile shape
+    cpl
+    ld d,a                  ; d=missile mask
+
     ld hl, (missiles+5)
     ld a, (hl)              ; Remove previous position
     and d
