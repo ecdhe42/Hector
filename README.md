@@ -83,11 +83,11 @@ A noter que lorsque l'on modifie la pointers vers la pile (`sp`) il faut désact
 
 ## Animer une piste de course
 
-Pour le programme "A fond! A fond! A fond!", Python a été utilisé pour générer de nombreuses tables. Tout d'abord pour créer la piste (cela permet de changer des paramètres si besoin est). Deux images PNG sont générées, converties au format Python et incorporées au programme:
+Pour le programme "A fond! A fond! A fond!", Python a été utilisé pour générer de nombreuses tables. Tout d'abord pour créer la piste (cela permet de changer des paramètres si besoin est). Deux images PNG sont générées, converties au format Hector et incorporées au programme:
 
 ![piste](track.png "Piste")
 
-Une piste est une combinaison de lignes de ces deux images. Le script [afond_create_track_ptr.py](afond_create_track_ptr.py) génère une 24 tables (une pour chaque image de l'animation). Chaque table indique pour chaque ligne l'adresse. Cela prend 4800 octets mais permet de minimiser les calculs à effectuer.
+Une piste est une combinaison de lignes de ces deux images. Le script [afond_create_track_ptr.py](afond_create_track_ptr.py) génère 24 tables (une pour chaque image de l'animation). Chaque table indique pour chaque ligne de la piste (100 lignes) l'adresse mémoire de la ligne a afficher. Cela prend 4800 octets mais permet de minimiser les calculs à effectuer.
 
 Chaque ligne est copiée à l'écran en utilisant 64 instructions `ldi` consécutives. L'avantage de cette instruction est qu'elle est plus rapide que `ldir` avec 16 cycles par octet copié au lieu de 22 (forcément, on ne décrémente pas le compteur à chaque octet). Etant donné que le gros de l'animation est sur 130 lignes (30 lignes pour les montagnes et 100 lignes pour la piste), le maximum théorique est de 5000000 / 64 / 130 / 16 = 37 FPS. Le jeu a une vitesse effective de 30 FPS du fait de nombreux autres calculs (voiture à dessiner en mode "cookie cutter", calculer l'évolution de la vitesse du véhicule, sa position sur le circuit, etc.)
 

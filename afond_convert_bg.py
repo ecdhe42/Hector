@@ -12,6 +12,7 @@ def get_color(val):
     if val[0] > 128 and val[1] > 128 and val[2] > 128:
         return 3
     print(val)
+    return None
 
 # 0: black
 # 1: red

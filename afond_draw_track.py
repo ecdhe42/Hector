@@ -14,20 +14,20 @@ def get_color(val):
         return 3
     print(val)
 
-col0 = PIL.ImageColor.getrgb("#000000")
-col1 = PIL.ImageColor.getrgb("#FF0000")
-col2 = PIL.ImageColor.getrgb("#00FF00")
-col3 = PIL.ImageColor.getrgb("#FFFFFF")
+col0 = PIL.ImageColor.getrgb("#000000")     # black
+col1 = PIL.ImageColor.getrgb("#FF0000")     # red
+col2 = PIL.ImageColor.getrgb("#00FF00")     # green
+col3 = PIL.ImageColor.getrgb("#FFFFFF")     # white
 
 draw = ImageDraw.Draw(img)
-draw.rectangle([(0,0),(255,199)], col2)
-draw.polygon([(120,0), (10,99), (240,99), (120,0)], col0)
-draw.polygon([(120,0), (10,99), (30,99), (120,0)], col3)
-draw.polygon([(120,0), (220,99), (240,99), (120,0)], col3)
-draw.polygon([(120,100), (10,199), (240,199), (120,100)], col0)
-draw.polygon([(120,100), (10,199), (30,199), (120,100)], col1)
-draw.polygon([(120,100), (220,199), (240,199), (120,100)], col1)
-draw.polygon([(120,100), (122,199), (128,199), (120,100)], col3)
+draw.rectangle([(0,0),(255,199)], col2)                             # Draw the grass (image #1)
+draw.polygon([(120,0), (10,99), (240,99), (120,0)], col0)           # Draw the pavement (image #1)
+draw.polygon([(120,0), (10,99), (30,99), (120,0)], col3)            # Draw the left white curb (image #1)
+draw.polygon([(120,0), (220,99), (240,99), (120,0)], col3)          # Draw the right white curb (image #2)
+draw.polygon([(120,100), (10,199), (240,199), (120,100)], col0)     # Draw the pavement (image #2)
+draw.polygon([(120,100), (10,199), (30,199), (120,100)], col1)      # Draw the left red curb (image #2)
+draw.polygon([(120,100), (220,199), (240,199), (120,100)], col1)    # Draw the right red curb (image #2)
+draw.polygon([(120,101), (118,199), (126,199), (120,101)], col3)    # Draw the middle white line (image #2)
 img.show()
 
 with open("rsc_afond.asm", "wb") as o:

@@ -18,7 +18,7 @@ include "afond_lower_ram.asm"
 ELSE
     org 4200h
 ENDIF
-    ld sp, 0C000h
+    ld sp, 0BFFFh
 
 start:
     call CLS        ; Clears screen
@@ -152,10 +152,10 @@ draw_sky:
     ld hl,0C000h
     ld de,0C001h
     ld bc,$40
-    ld a, $EE
+    ld a, $DD
     ld (hl), a                      ; Set the first byte of the first line to be $EE
     ldir                            ; Copy a whole line one byte right, i.e. write the whole line with $EE
-    ld a, $BB
+    ld a, $77
     ld (hl), a                      ; Set the first byte of the second line to be $BB
     ld bc,$40
     ldir                            ; Repeat the operation
@@ -269,7 +269,7 @@ draw_distance:
     call display_digit
 
 ; ######################################################################################
-    di
+;    di
 
     ld iy, (gear_speed_ptr)         ; iy = &gear_speed
     jp draw_speed_rpm
@@ -478,17 +478,26 @@ cars_crash:
     ld a, 25
     ld (other_car_height), a    ; Used for the number of iterations
 
-    ld sp, (car_bitmap_h)   ; The stack pointer points to the sprite data
+;    ld sp, (car_bitmap_h)   ; The stack pointer points to the sprite data
+    ld hl, (car_bitmap_h)
 draw_cars_collision:
 REPT 12
-    pop bc                  ; B = sprite value, C = mask value
-    ld a, (de)              ; A = background
-    and c                   ; A = background & mask
-    or b                    ; A = (background & mask) | car
-    ld (de), a              ; Store byte back on the screen
+;    pop bc                  ; B = sprite value, C = mask value
+;    ld a, (de)              ; A = background
+;    and c                   ; A = background & mask
+;    or b                    ; A = (background & mask) | car
+;    ld (de), a              ; Store byte back on the screen
+;    inc e
+    ld c, (hl)
+    inc hl
+    ld b, (hl)
+    inc hl
+    ld a, (de)
+    and c
+    or b
+    ld (de), a
     inc e
 ENDM
-
     ex de, hl
     ld bc, 64-12
     add hl, bc
@@ -497,7 +506,7 @@ ENDM
     dec a
     ld (other_car_height), a
     jp nz, draw_cars_collision
-    ld sp, 0C000h
+;    ld sp, 0BFFFh
 
     ld a, -28
     ld (other_car_y_max), a     ; Reset other car Y position
@@ -583,17 +592,33 @@ draw_car:
     and $C0                 ; Align A to the left of the screen
     add a, b                ; A += car_x
     ld e, a                 ; DE = screen address (left-aligned) + car_x
-    ld sp, (car_bitmap_h)   ; The stack pointer points to the sprite data
+    ; The original method was to use the stack to copy data. Unfortunately
+    ; this creates a lot of issue on the actual hardware
+;    di
+;    ld sp, (car_bitmap_h)   ; The stack pointer points to the sprite data
+;REPT 12
+;    pop bc                  ; B = sprite value, C = mask value
+;    ld a, (de)              ; A = background
+;    and c                   ; A = background & mask
+;    or b                    ; A = (background & mask) | car
+;    ld (de), a              ; Store byte back on the screen
+;    inc e
+;ENDM
+    ld hl, (car_bitmap_h)
 REPT 12
-    pop bc                  ; B = sprite value, C = mask value
-    ld a, (de)              ; A = background
-    and c                   ; A = background & mask
-    or b                    ; A = (background & mask) | car
-    ld (de), a              ; Store byte back on the screen
+    ld c, (hl)
+    inc hl
+    ld b, (hl)
+    inc hl
+    ld a, (de)
+    and c
+    or b
+    ld (de), a
     inc e
 ENDM
-    ld (car_bitmap_h), sp
-    ld sp, 0BFFEh           ; Restore the stack (BEWARE: need to make sure it's the right value)
+    ld (car_bitmap_h), hl
+;    ld sp, 0BFFEh           ; Restore the stack (BEWARE: need to make sure it's the right value)
+;    ei
 end_draw_car
 
 prepare_next_track_line:
@@ -715,11 +740,14 @@ animate_track_reset:
 end_animate_track:
 
 check_accel_decel:
-    ; Check keyboard for space (acceleration)
-    ld hl, 03800h
+    ; Check joystick button (acceleration)
+;    ld hl, 03800h      ; check space key
+    ld hl, 05FF7h
     ld a, (hl)
-    cp $ff
-    jp z, decelerate            ; If the key is not pressed, decelerate
+    bit 7, a
+    jp nz, decelerate 
+;    cp $ff
+;    jp z, decelerate            ; If the key is not pressed, decelerate
 accelerate:                     ; If the key is pressed, accelerate
     ld a, (iy)
     cp 8
@@ -1440,7 +1468,7 @@ author2
 author3
     db "graphiques",0
 game_won:
-    db "GAME OVER"
+    db "COURSE TERMINEE"
 
 variables:
 turn_dir        db 0
