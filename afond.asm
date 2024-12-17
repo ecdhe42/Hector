@@ -7,6 +7,12 @@ PUTSTR  equ 0D0Ch
 CLS     equ 0D2Fh
 SETCOLS equ 19E0h
 COLORS  equ 0BD3h
+VRAM_HR equ 0800h
+RAM_HR  equ 0808h
+ROM_BR  equ 080Ch
+VRAM_BR equ 0804h
+INK     equ 0BBDh
+TYPE    equ 179Fh
 FPS     equ 27
 
 IF K7
@@ -28,10 +34,32 @@ start:
 ; ##########################################################################
 ; # Splash screen
 ; ##########################################################################
+IF HRX
+    ld hl,0C000h
+    ld de,0C001h
+    ld bc,039BFh
+    ld a, 0
+    ld (hl), a                      ; Set the first byte of the first line to be 0
+    ldir                            ; Copy a whole line one byte right, i.e. write the whole screen with 0
+ELSE
     ld a, 0
     call SETSCR     ; Screen color = 0 (black)
-;    ld c, 1
-;    CALL CHRCOL     ; Text color = 1 (red)
+ENDIF
+
+    ; Set color palette
+    ; 0=black
+    ; 1=red
+    ; 2=green
+    ; 3=yellow
+    ; 4=blue
+    ; 5=magenta
+    ; 6=cyan
+    ; 7=white
+    ; <half-tone first color><half-tone second color><second color><first color>
+    ld hl, 01000h
+    ld (hl), 50h    ; color0 = 0 (black), color2 = 2 (green)
+    ld hl, 01800h
+    ld (hl), 39h    ; color1 = 1 (red), color3 = 7 (white)
 
     ld a, 3
     ld (tmp), a
@@ -64,6 +92,56 @@ draw_title_line:
     cp 0
     jp nz, draw_title
 
+IF HRX
+    ld de, 0D601h
+    ld ix, please_select
+    ld bc, 0AA00h
+    call display_text
+
+    ld de, 0D881h
+    ld ix, track1_name
+    call display_text
+
+    ld de, 0DB01h
+    ld ix, track2_name
+    call display_text
+
+    ld de, 0E001h
+    ld ix, author
+    ld bc, 0FF00h
+    call display_text
+
+    ld de, 0E281h
+    ld ix, author2
+    call display_text
+
+    ld de, 0E501h
+    ld ix, author3
+    call display_text
+
+;    ld a, 1
+;    ld (VRAM_HR), a     ; Indicate we write in VRAM
+;    ld a,$1B
+;	ld hl,$0004	        ;X Y
+;	rst 28H
+;
+;	ld a,$03
+;	call INK
+;	
+;	LD HL,please_select
+;	LD BC,25
+;	CALL TYPE
+;
+;	LD HL,track1_name
+;    LD BC,25
+;	CALL TYPE
+;
+;	LD HL,track2_name
+;    LD BC,25
+;	CALL TYPE
+;
+;    ld (RAM_HR), a      ; Indicate we write in RAM
+ELSE
     ld c, 2
     CALL CHRCOL     ; Text color = 2
     ld de, 185Ch    ; X and Y positions
@@ -87,6 +165,7 @@ draw_title_line:
     ld de, 18B6h    ; X and Y positions
     ld bc, author3  ; Text
     call PUTSTR     ; Displays text on screen
+ENDIF
 
 splash_loop:
     call rand
@@ -101,37 +180,34 @@ splash_loop:
     jp splash_loop
 select_track1:
     ld a, 5
+    ld (lap), a
+    ld a, 5
     ld (track_dist1), a
+    ld (def_track_dist1), a
     ld a, 45
     ld (track_dist2), a
+    ld (def_track_dist2), a
     ld bc, track1
     ld (track_ptr), bc
     jp splash_end
 select_track2:
+    ld a, 15
+    ld (lap), a
     ld a, 10
     ld (track_dist1), a
+    ld (def_track_dist1), a
     ld a, 25
     ld (track_dist2), a
+    ld (def_track_dist2), a
     ld bc, track2
     ld (track_ptr), bc
 splash_end
+
+IF HRX
+ELSE
     ld a, 0h
     call SETSCR     ; Screen color = 0 (black)
-
-    ; Set color palette
-    ; 0=black
-    ; 1=red
-    ; 2=green
-    ; 3=yellow
-    ; 4=blue
-    ; 5=magenta
-    ; 6=cyan
-    ; 7=white
-    ; <half-tone first color><half-tone second color><second color><first color>
-    ld hl, 01000h
-    ld (hl), 50h    ; color0 = 0 (black), color2 = 2 (green)
-    ld hl, 01800h
-    ld (hl), 39h    ; color1 = 1 (red), color3 = 7 (white)
+ENDIF
 
     ld ix, bitmap_ptr               ; ix = track bitmap pointer
     ld iy, gear_speed
@@ -230,7 +306,7 @@ draw_init_gearbox_icon:
     cp 0
     jp nz, draw_init_gearbox_icon
 
-    ld a, 26
+    ld a, 33
     ld hl,bitmap_flag
     ld de,$EC42
 draw_flag:
@@ -248,25 +324,8 @@ draw_flag:
     cp 0
     jp nz, draw_flag
 
-draw_distance:
-    ld b, 0
-    ld a, (track_dist1)
-    ld c, a
-    ld hl, digits
-    add hl, bc
-    ld d,h
-    ld e,l
-    ld hl, $F18B
-    call display_digit
-    ld a, (track_dist2)
-    ld b, 0
-    ld c, a                     ; bc = *(&gear_speed + gear_speed_offset)
-    ld hl, digits
-    add hl, bc
-    ld d,h
-    ld e,l
-    ld hl, $F18C
-    call display_digit
+    call draw_lap
+    call draw_distance
 
 ; ######################################################################################
 ;    di
@@ -911,7 +970,22 @@ end_update_track_dist
     ld bc, (track_ptr)          ; Get the new track (bc=*track_ptr)
     ld a, (bc)
     cp $FF
-    jp z, game_over             ; If the track value = $FF, end of the game
+    jp nz, keep_going           ; If the track value = $FF, end of the lap
+    ld a, (lap)
+    add a, 251                  ; lap-=5
+    ld (lap), a
+    call draw_lap
+    ld a, (lap)
+    cp 0
+    jp z, game_over             ; If lap=0, game over
+    ld a, (def_track_dist1)     ; Otherwise reset the distance counter (checkpoint)
+    ld (track_dist1), a
+    ld a, (def_track_dist2)
+    ld (track_dist2), a
+    call draw_distance          ; And redraw the distance
+    ld bc, track2               ; Reset track_ptr to the beginning of the track
+    ld (track_ptr), bc
+keep_going:
     and $C0                     ; A = *track_ptr & 0xC0 (top 2 bits of *track_ptr, direction)
     cp 0
     jp z, end_check_road_turn   ; If A = 0, then no turn
@@ -1007,15 +1081,19 @@ end_timer:
 
 
 game_over:
-    ld c, 1h
-    CALL CHRCOL     ; Text color = 1 (red)
-    ld de, 6069h    ; X and Y positions
-    ld bc, game_won  ; Text
-    call PUTSTR     ; Displays text on screen
-    ld de, 5079h
-    ld bc, (track_ptr)
-    inc bc
-    call PUTSTR     ; Displays text on screen
+    ld de, 0DBD0h
+    ld ix, race_over
+    ld bc, 05500h
+    call display_text
+;    ld c, 1h
+;    CALL CHRCOL     ; Text color = 1 (red)
+;    ld de, 506Fh    ; X and Y positions
+;    ld bc, game_won  ; Text
+;    call PUTSTR     ; Displays text on screen
+;    ld de, 507Fh
+;    ld bc, (track_ptr)
+;    inc bc
+;    call PUTSTR     ; Displays text on screen
 
     ; Restore all variable initial states
     ld hl, variables_backup
@@ -1445,6 +1523,113 @@ display_digit:
     ld (hl), a
     ret
 
+draw_lap:
+    ld b, 0
+    ld a, (lap)
+    ld c, a
+    ld hl, digits       
+    add hl, bc          ; hl = digits + lap
+    ld d, h
+    ld e, l
+    ld hl, $F38B
+    call display_digit
+    ret
+
+draw_distance:
+    ld b, 0
+    ld a, (track_dist1)
+    ld c, a
+    ld hl, digits
+    add hl, bc
+    ld d,h
+    ld e,l
+    ld hl, $F18B
+    call display_digit
+    ld a, (track_dist2)
+    ld b, 0
+    ld c, a                     ; bc = *(&gear_speed + gear_speed_offset)
+    ld hl, digits
+    add hl, bc
+    ld d,h
+    ld e,l
+    ld hl, $F18C
+    call display_digit
+    ret
+
+; DE: target address on screen
+; IX: source text
+; B: mask ($55=red, $AA=green, $FF=white)
+display_text:
+    ld a, (ix)                  ; A = character from the text
+    cp 32
+    jp nz, display_character
+    inc ix
+    inc de
+    inc de
+    jp display_text
+display_character:
+    cp 0
+    jp z, display_text_end      ; If end of string => finish
+    ld hl, font                 ; HL = font bitmap address
+    sbc a, 65                   ; A = offset inside the mini-ASCII table (A=0, B=1, C=2, etc.)
+    push af
+    sla a
+    sla a
+    sla a
+    sla a                       ; A = A*16 (lower byte)
+    and a                       ; clear carry
+    add a,l                     ; Add this to L
+    ld l,a
+    ld a,h
+    adc a,0
+    ld h,a
+    pop af
+    srl a
+    srl a
+    srl a
+    srl a                       ; A = A*16 (higher byte)
+    and a                       ; clear carry
+    add a,h                     ; Add this to H
+    ld h,a                      ; HL: points to the right character in memory
+
+;    ldi
+;    ldi             ; Copy two bytes
+    push de                     ; DE=address on the screen where to display the character
+    ld a, 8                     ; We loop 8 times (for the 8 lines)
+display_character_loop:
+    push af
+    ld a, (hl)                  ; A = 
+    and b
+    ld (de), a
+    inc hl
+    inc de
+    ld a, (hl)
+    and b
+    ld (de), a
+    inc hl
+    inc de
+
+    ex de,hl                    ; DE += 62
+    push bc
+    ld bc, 62
+    add hl, bc
+    pop bc
+    ex de,hl
+
+    pop af
+    dec a                       ; A-- (line number)
+    cp 0
+    jp nz, display_character_loop
+
+    inc ix
+    pop de
+    inc de
+    inc de
+    jp display_text
+display_text_end:
+    ret
+    
+
 rand:
 	ld	a, (rand_seed)	; get seed
 	and	$B8		; mask non feedback bits
@@ -1457,18 +1642,16 @@ rand_no_clr:
 	ld	(rand_seed), a	; save back for next prn
 	ret			; done
 
-title:
-    db "A FOND A FOND A FOND!", 0
 please_select:
-    db "Choisissez votre circuit:", 0
+    db "BHOISISSEZ VOTRE CIRCUITe", 0
 author
-    db "Copyleft Laurent Poulain 2024", 0
+    db "BOPYLEFT KAURENT WOULAIN ][]_", 0
 author2
-    db "Avec l'aide d'Olipix pour les",0
+    db "aVEC LdAIDE Dd[LIPIX POUR LES",0
 author3
-    db "graphiques",0
-game_won:
-    db "COURSE TERMINEE"
+    db "GRAPHIQUES",0
+race_over:
+    db "BOURSE bERMINfE",0
 
 variables:
 turn_dir        db 0
@@ -1507,10 +1690,13 @@ gear_rpm        db 16
 gear_refresh    db 0
 gear_speed_offset    db 0
 gear_speed_ptr  db 0, 0
+lap             db 0
+def_track_dist1 db 0
+def_track_dist2 db 0
 test_cars_collision  db 0
 
 variables_backup:
-    db 0, 0, 0, 0, 0, 0, $16, 0, 0, 0, 0, 30, -28, 0, 0, 0, 0, 1, 100, 10, 12, 0, 0, 0, 0, 0, FPS, 0, 10, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0
+    db 0, 0, 0, 0, 0, 0, $16, 0, 0, 0, 0, 30, -28, 0, 0, 0, 0, 1, 100, 10, 12, 0, 0, 0, 0, 0, FPS, 0, 10, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0
 
 rand_seed       db 42
 
@@ -1527,11 +1713,11 @@ track1
     ; $FF = end of the track (game over)
     db 128+20, 64+48, 64+1, 64+63, 128+1, 128+63, 128+1, 128+1, 128+63, 64+1, 64+1, 64+1, 64+1, 64+1, 64+63, 128+1, 128+1, 128+63, $FF
 track1_name
-    db "1. Petit joueur", 0
+    db "\\` WETIT JOUEUR", 0
 track2
     db 129,129,191,65,65,65,65,65,127,129,129,129,129,129,191,65,65,65,65,65,127,129,129,191,$FF
 track2_name
-    db "2. Rapide et venere", 0
+    db "]` cAPIDE ET VfNgRE", 0
 
 track_ptr   db 0, 0
 
@@ -1540,7 +1726,8 @@ include "afond_lower_ram.asm"
 ENDIF
 
 include "rsc_afond_cars_others.asm"
-
+font:
+include "rsc_font.asm"
 end_program
 
 IF K7 = 0

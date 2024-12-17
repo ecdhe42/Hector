@@ -1,4 +1,4 @@
-all: bin/henon1.K7 bin/henon2.K7 bin/henon2.bin bin/henon1.bin bin/afond.bin bin/afond.k7
+all: bin/henon1.K7 bin/henon2.K7 bin/henon2.bin bin/henon1.bin bin/afond.bin bin/afond.k7 bin/afond_hrx.bin
 
 bin/henon1.K7: henon1_k7.bin rsc_henon1.bin
 	python create_k7.py 1
@@ -34,10 +34,13 @@ bin/olipix.bin: olipix.asm
 	pasmo.exe olipix.asm bin/olipix.bin
 
 bin/afond.bin: afond.asm rsc_afond.asm rsc_afond_bg.asm afond_bitmap_ptr.asm afond_upper_ram.asm afond_lower_ram.asm
-	pasmo.exe -E K7=0 afond.asm bin/afond.bin afond.sym
+	pasmo.exe -E K7=0 -E HRX=0 afond.asm bin/afond.bin afond.sym
+
+bin/afond_hrx.bin: afond.asm rsc_afond.asm rsc_afond_bg.asm afond_bitmap_ptr.asm afond_upper_ram.asm afond_lower_ram.asm
+	pasmo.exe -E K7=0 -E HRX=1 afond.asm bin/afond_hrx.bin afond_hrx.sym
 
 afond_k7.bin: afond.asm rsc_afond.asm rsc_afond_bg.asm afond_bitmap_ptr.asm afond_upper_ram_include.asm afond_lower_ram.asm
-	pasmo.exe -E K7=1 afond.asm afond_k7.bin afond_k7.sym
+	pasmo.exe -E K7=1 -E HRX=0 afond.asm afond_k7.bin afond_k7.sym
 
 afond_upper_ram_include.asm: afond_upper_ram.asm rsc_afond.asm rsc_afond_bg.asm rsc_afond_needles.asm afond_bitmap_ptr.asm
 	pasmo.exe afond_upper_ram.asm afond_upper_ram.bin afond_upper_ram_include.asm

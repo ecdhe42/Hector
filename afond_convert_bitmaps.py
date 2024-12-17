@@ -106,8 +106,8 @@ def convert_flag():
                 val = val1*16*4 + val2*16 + val3*4 + val4
                 db.append(str(val))
 
-        for y in range(int(len(db) / 16)):
-            line = '    db ' + ','.join(db[y*16:y*16+16]) + '\r\n'
+        for y in range(int(len(db) / 8)):
+            line = '    db ' + ','.join(db[y*8:y*8+8]) + '\r\n'
             o.write(line.encode())
 
 #convert_digits()
